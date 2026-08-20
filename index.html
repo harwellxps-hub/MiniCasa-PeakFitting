@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mini-Casa — HarwellXPS training simulator</title>
+<style>
+/* ============================================================================
+   MINI-CASA — a minimal CasaXPS-style simulator for guided XPS training.
+   Chrome: classic Windows grey. Plot colours match CasaXPS .DEF defaults:
+     data trace   RGB(255,0,0)
+     background   RGB(128,64,0)
+     region limit RGB(72,72,255)
+     region fill  RGB(239,239,239)
+   The HarwellXPS trainer overlay is deliberately branded differently
+   (white / #23F9FF / #175FFF / black) so learners can tell guide from app.
+   ============================================================================ */
+:root{
+  --chrome:#ECE9D8; --chrome-dark:#ACA899; --chrome-light:#FFFFFF;
+  --title1:#0A246A; --title2:#A6CAF0;
+  --sel:#316AC5; --selText:#fff;
+  --ink:#000;
+  --hxBlue:#175FFF; --hxCyan:#23F9FF; --hxInk:#0B0F17; --hxMuted:#5B6577;
+  --leftPane:#E2E2F1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{font-family:Tahoma,"Segoe UI",Arial,sans-serif;font-size:12px;background:#9AA7B8;color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+/* ---- app window ---- */
+#appwin{display:flex;flex-direction:column;position:absolute;inset:8px 8px 26px;min-width:760px;min-height:520px;
+  background:var(--chrome);border:1px solid #404040;box-shadow:2px 2px 10px rgba(0,0,0,.45)}
+#titlebar{display:flex;align-items:center;gap:7px;padding:4px 8px;color:#000;font-weight:400;font-size:12px;
+  background:#fff;border-bottom:1px solid #E4E4E4;user-select:none}
+#titlebar .house{width:16px;height:16px;flex:0 0 auto}
+#titlebar .fake{margin-left:auto;display:flex;gap:14px;color:#000;font-size:12px;padding-right:4px}
+#menubar{display:flex;gap:0;padding:1px 2px;background:#fff;border-bottom:1px solid #E4E4E4}
+#menubar .menu{padding:3px 9px;cursor:default}
+#menubar .menu:hover{background:#E5F1FB;outline:1px solid #99C9EF}
+.trow{display:flex;align-items:center;gap:1px;padding:2px 4px;background:var(--chrome);border-bottom:1px solid #DADADA;flex-wrap:wrap}
+.tbtn{height:24px;min-width:25px;display:inline-flex;align-items:center;justify-content:center;background:transparent;
+  border:1px solid transparent;padding:0 1px;cursor:pointer;position:relative}
+.trow3 .tbtn{height:30px;min-width:31px}
+.tbtn:hover{background:#E8F0F8;border-color:#B8D0E8}
+.tbtn:active{background:#D8E6F2}
+.tbtn svg{width:17px;height:17px}
+.trow3 .tbtn svg{width:24px;height:24px}
+.tbtn.dead{cursor:default;filter:grayscale(85%);opacity:.42}
+.tbtn.dead:hover{background:transparent;border-color:transparent}
+.tbtn.live{background:#FFF6DD;border-color:#E4B84C;box-shadow:0 0 0 1px rgba(228,184,76,.35)}
+.tbtn.live:hover{background:#FFEFC2}
+.tsep{width:1px;height:20px;background:#C8C8C8;margin:0 4px}
+
+/* ---- main split ---- */
+#main{flex:1;display:flex;min-height:0}
+#tilearea{flex:1;background:#E2E2F1;border:1px solid #B9B9C9;border-top:none;margin:0;position:relative;min-width:0}
+#plot{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+#browser{width:230px;flex:0 0 auto;display:flex;flex-direction:column;margin:0;border:1px solid #B9B9C9;border-top:none;border-left:3px solid #D6D6D6;background:#fff;min-height:0}
+#blocklist{overflow:auto}
+table.dstable{border-collapse:collapse;font-size:11px;width:100%}
+table.dstable th{border:1px solid #C9C9C9;background:#F5F5F5;font-weight:400;padding:2px 6px;text-align:left;white-space:nowrap}
+table.dstable td{border:1px solid #D5D5D5;padding:0;white-space:nowrap}
+table.dstable td.dsnum{background:#EAF5EA;padding:2px 8px}
+.dscell{display:flex;align-items:stretch;cursor:pointer}
+.dscell i{width:4px;background:#39B54A;flex:0 0 auto}
+.dscell span{padding:2px 5px;overflow:hidden;text-overflow:ellipsis;max-width:64px}
+.dscell:hover span{background:#E5F1FB}
+td.on .dscell span{background:#D40000;color:#fff}
+#browser .bfoot{margin-top:auto;padding:4px 6px;color:#777;font-size:11px}
+/* real-toolbar image rows (used when CONFIG.TOOLBAR images are supplied) */
+.trowimg{width:100%;line-height:0;border-bottom:1px solid #DADADA;background:#F0F0F0}
+.trowimg .tinner{position:relative;width:100%}
+.trowimg img.base{width:100%;height:auto;display:block;filter:grayscale(85%) opacity(.45) contrast(.92)}
+.trowimg .livecut{position:absolute;top:0;height:100%;overflow:hidden;outline:2px solid #E4B84C;outline-offset:-1px;background:#F0F0F0}
+.trowimg .livecut img{position:absolute;top:0;height:100%;width:auto}
+.trowimg .hot{position:absolute;top:0;height:100%;background:transparent;border:none;cursor:pointer;padding:0}
+#statusbar{display:flex;gap:0;padding:0;border-top:1px solid #D0D0D0;background:#F0F0F0;font-size:11px;color:#222;align-items:stretch}
+#statusbar .cell{padding:3px 10px;min-width:110px;border-right:1px solid #DDD}
+#statusbar .grow{flex:1;border-right:none}
+#statusbar .right{border-left:1px solid #DDD;border-right:none;min-width:56px;text-align:center}
+
+/* ---- quantification parameters window (modern Casa dialog) ---- */
+#qwin{position:absolute;width:460px;background:#F0F0F0;border:1px solid #9B9B9B;box-shadow:0 6px 22px rgba(0,0,0,.35);display:none;z-index:40;font-size:12px}
+#qwin.open{display:block}
+#qtitle{display:flex;align-items:center;gap:7px;padding:6px 4px 6px 10px;color:#000;font-size:12px;background:#F0F0F0;cursor:move;user-select:none}
+#qtitle .qico{width:12px;height:12px;border:1.6px solid #888;border-radius:2px;flex:0 0 auto}
+#qtitle .qsys{margin-left:auto;display:flex}
+#qtitle .qsys span{width:34px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:#444;font-size:11px;cursor:default}
+#qtitle .qsys .x{cursor:pointer;font-size:13px}
+#qtitle .qsys .x:hover{background:#E81123;color:#fff}
+#qtabs{display:flex;gap:0;padding:2px 8px 0;border-bottom:1px solid #C9C9C9;background:#F0F0F0}
+.qtab{padding:4px 9px;border:1px solid transparent;border-bottom:none;cursor:pointer;color:#222}
+.qtab.active{background:#fff;border-color:#C9C9C9;font-weight:400;position:relative;top:1px}
+#qbody{background:#F0F0F0;min-height:250px;padding:9px 10px 10px}
+.qhead{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.qhead input[type=text]{flex:1;height:22px;border:1px solid #ABABAB;background:#fff;font:inherit;padding:0 6px}
+.qhead label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.qgridwrap{background:#fff;border:1px solid #ABABAB;max-height:240px;overflow:auto;margin-bottom:8px}
+table.rgrid{border-collapse:collapse;width:100%;font-size:12px}
+table.rgrid th,table.rgrid td{border-right:1px solid #E2E2E2;border-bottom:1px solid #F0F0F0;padding:1px 6px;text-align:left;height:19px}
+table.rgrid tr.gridhead th{background:#F0F0F0;border:1px solid #C9C9C9;font-weight:400}
+table.rgrid th.rowlab{font-weight:400;color:#000;white-space:nowrap;background:#fff;border-right:1px solid #E2E2E2}
+table.rgrid td input{width:100%;border:none;background:transparent;font:inherit;padding:0}
+table.rgrid td input:focus{outline:1px solid var(--sel);background:#F2F7FF}
+table.rgrid td.calc{color:#333}
+table.rgrid td.deadcell{color:#9A9A9A}
+table.rgrid input.bgcell{cursor:cell}
+.qcols{display:flex;gap:8px;align-items:flex-start}
+.qcolL{flex:1;display:flex;flex-direction:column;gap:5px}
+.qcolR{display:flex;flex-direction:column;gap:5px}
+.qrow{display:flex;gap:5px;flex-wrap:wrap}
+.wbtn{padding:3px 10px;background:#E1E1E1;border:1px solid #ADADAD;cursor:pointer;font-size:12px}
+.wbtn:hover{background:#E5F1FB;border-color:#0078D7}
+.wbtn:active{background:#CCE4F7}
+.wbtn.dead,.wbtn[disabled]{color:#9F9F9F;background:#F0F0F0;border-color:#C9C9C9;cursor:default}
+.wbtn.dead:hover{background:#F0F0F0;border-color:#C9C9C9}
+fieldset.ical{border:1px solid #C9C9C9;padding:5px 8px 7px;margin:2px 0 0;font-size:11.5px;color:#333}
+fieldset.ical legend{padding:0 4px;font-size:11.5px}
+fieldset.ical .irow{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+fieldset.ical input[type=text]{width:52px;height:19px;border:1px solid #ABABAB;font:inherit;padding:0 4px}
+/* Background Types dialog */
+#bgdlg{position:absolute;width:250px;background:#F0F0F0;border:1px solid #9B9B9B;box-shadow:0 8px 26px rgba(0,0,0,.4);display:none;z-index:50}
+#bgdlg.open{display:block}
+#bgtitle{display:flex;align-items:center;padding:6px 4px 6px 10px;font-size:12px;cursor:move;user-select:none}
+#bgtitle .x{margin-left:auto;width:34px;height:22px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px}
+#bgtitle .x:hover{background:#E81123;color:#fff}
+#bgbody{display:flex;gap:8px;padding:4px 10px 12px}
+#bglist{flex:1;background:#fff;border:1px solid #ABABAB;height:150px;overflow:auto}
+#bglist .lh{border-bottom:1px solid #C9C9C9;background:#F0F0F0;padding:2px 7px;font-size:11.5px}
+#bglist .opt2{padding:2px 7px;cursor:default}
+#bglist .opt2.sel{background:#0078D7;color:#fff}
+#bgok{display:flex;flex-direction:column;gap:6px}
+#bgok .wbtn{min-width:64px}
+.qnote{color:#555;font-size:11px;padding:6px 2px}
+table.quant{border-collapse:collapse;font-family:"Courier New",monospace;font-size:12px;width:100%}
+table.quant th,table.quant td{border:1px solid #C8C8C8;padding:3px 8px;text-align:right}
+table.quant th{background:#ECE9D8;text-align:center}
+table.quant td:first-child,table.quant th:first-child{text-align:left}
+
+/* ---- mock replica windows + menu dropdowns (software tour) ---- */
+.mockwin{position:absolute;background:#F0F0F0;border:1px solid #9B9B9B;box-shadow:0 8px 26px rgba(0,0,0,.4);display:none;z-index:45;font-size:12px}
+.mockwin.open{display:block}
+.mtitle{display:flex;align-items:center;gap:7px;padding:6px 4px 6px 10px;cursor:move;user-select:none}
+.mtitle .mico{width:12px;height:12px;border:1.6px solid #888;border-radius:2px;flex:0 0 auto}
+.mtitle .msys{margin-left:auto;display:flex}
+.mtitle .msys span{width:34px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:#444;font-size:11px}
+.mtitle .msys .mx{cursor:pointer;font-size:13px}
+.mtitle .msys .mx:hover{background:#E81123;color:#fff}
+.mtabs{display:flex;flex-wrap:wrap;gap:0;padding:2px 8px 0;border-bottom:1px solid #C9C9C9}
+.mtab{padding:3px 8px;border:1px solid transparent;border-bottom:none;cursor:pointer;white-space:nowrap}
+.mtab.active{background:#fff;border-color:#C9C9C9;position:relative;top:1px}
+.mbody{padding:9px 10px 12px;min-height:160px;max-height:440px;overflow:auto}
+.mrow{display:flex;gap:5px;flex-wrap:wrap;margin:3px 0;align-items:center}
+fieldset.mgroup{border:1px solid #C9C9C9;padding:5px 8px 7px;margin:5px 0;font-size:11.5px;color:#222}
+fieldset.mgroup legend{padding:0 4px;font-size:11.5px}
+.mlist{background:#fff;border:1px solid #ABABAB;overflow:auto}
+.mlist .lh{border-bottom:1px solid #C9C9C9;background:#F0F0F0;padding:2px 7px;font-size:11.5px}
+.mchk{display:inline-flex;align-items:center;gap:4px;margin:1px 10px 1px 0;white-space:nowrap;color:#222;font-size:11.5px}
+.mchk input{margin:0}
+.mtxt{height:19px;border:1px solid #ABABAB;background:#fff;font:inherit;padding:0 4px}
+table.elib{border-collapse:collapse;width:100%;font-size:11.5px;background:#fff}
+table.elib th,table.elib td{border:1px solid #D5D5D5;padding:1px 6px;text-align:left;white-space:nowrap}
+table.elib th{background:#F0F0F0;font-weight:400}
+table.elib td.num{text-align:right}
+.ptable{display:grid;grid-template-columns:repeat(18,1fr);gap:2px;margin:4px 0 10px}
+.ptable button{font-size:10px;padding:2px 0;background:#E9E9E9;border:1px solid #ADADAD;cursor:pointer;color:#222}
+.menudrop{position:absolute;background:#F5F5F5;border:1px solid #A0A0A0;box-shadow:3px 3px 10px rgba(0,0,0,.3);z-index:80;min-width:250px;padding:2px 0;display:none;font-size:12px;max-height:520px;overflow:auto}
+.menudrop.open{display:block}
+.menudrop .mi{display:flex;justify-content:space-between;gap:18px;padding:3px 18px 3px 24px;color:#333;white-space:nowrap;cursor:default}
+.menudrop .mi:hover{background:#E5F1FB}
+.menudrop .mi .acc{color:#777}
+.menudrop .msep{height:1px;background:#D5D5D5;margin:3px 2px}
+
+/* ---- trainer overlay ---- */
+#tutor{position:absolute;right:14px;bottom:40px;width:330px;background:#fff;border:1px solid #DDE3EE;border-radius:14px;
+  box-shadow:0 10px 30px rgba(11,15,23,.25);z-index:60;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#tutor .thead{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--hxInk);color:#fff;cursor:move;user-select:none}
+#tutor .thead .logo{font-size:13px;font-weight:900}
+#tutor .thead .logo b{color:var(--hxCyan)}
+#tutor .thead .steps{margin-left:auto;font-size:11px;font-weight:700;color:#9BA6BC}
+#tutor .thead .mini{width:20px;height:20px;border:none;background:#26314B;color:#B7C0D4;border-radius:6px;font-weight:700;cursor:pointer;line-height:1}
+#tbody2{padding:12px 14px 14px}
+#tutor .do{font-size:13.5px;font-weight:700;color:var(--hxInk);line-height:1.45}
+#tutor .why{margin-top:8px;font-size:12.5px;line-height:1.55;color:#2A3242;background:#F6F8FB;border-radius:9px;padding:9px 11px}
+#tutor .state{margin-top:9px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:7px}
+#tutor .state.wait{color:var(--hxMuted)}
+#tutor .state.done{color:#0E7A46}
+#tutor .tnav{display:flex;gap:10px;margin-top:11px;align-items:center}
+#tutor .tnav .dots{display:flex;gap:4px;margin-right:auto}
+#tutor .skip{font-size:11.5px;color:#8A94A6;background:none;border:none;cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:0}
+#tutor .tnav .dots i{width:6px;height:6px;border-radius:3px;background:#DDE3EE}
+#tutor .tnav .dots i.on{background:var(--hxBlue)}
+#tutor .tnav .dots i.past{background:#9DB9FF}
+.hxbtn{border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;
+  background:linear-gradient(90deg,var(--hxBlue),#0E47C9);color:#fff}
+.hxbtn[disabled]{background:#B9C4DA;cursor:default}
+.hxbtn.ghost{background:#fff;color:var(--hxInk);border:1px solid #DDE3EE}
+#tutorpill{position:absolute;right:14px;bottom:40px;z-index:60;display:none;border:none;border-radius:999px;padding:9px 16px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12.5px;font-weight:800;cursor:pointer;
+  background:var(--hxInk);color:#fff;box-shadow:0 8px 24px rgba(11,15,23,.3)}
+#tutorpill b{color:var(--hxCyan)}
+#spot{position:absolute;z-index:55;pointer-events:none;border:3px solid var(--hxCyan);border-radius:10px;
+  box-shadow:0 0 0 3px rgba(23,95,255,.55), 0 0 18px rgba(35,249,255,.8);display:none;transition:all .25s ease}
+@keyframes spotPulse{0%,100%{box-shadow:0 0 0 3px rgba(23,95,255,.55),0 0 14px rgba(35,249,255,.65)}50%{box-shadow:0 0 0 6px rgba(23,95,255,.3),0 0 26px rgba(35,249,255,.95)}}
+#spot.on{display:block;animation:spotPulse 1.6s ease-in-out infinite}
+#endcard{position:absolute;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:rgba(11,15,23,.55)}
+#endcard.open{display:flex}
+#endcard .card{width:min(460px,92%);background:#fff;border-radius:16px;padding:26px;text-align:center;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+#endcard h2{margin:0 0 6px;font-size:22px;color:var(--hxInk)}
+#endcard p{font-size:13.5px;line-height:1.6;color:#2A3242}
+.dis{opacity:.5;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="appwin">
+  <div id="titlebar">
+    <svg class="house" viewBox="0 0 24 24"><path d="M4 21 L4 10 L2 11 L12 3 L22 11 L20 10 L20 21 Z M8 21 L8 14 L16 14 L16 21" fill="none" stroke="#CC1111" stroke-width="2.2" stroke-linejoin="round"/></svg>
+    <span id="titletext">Mini-Casa Trainer — HarwellXPS Learning Centre - [Trainer1]</span>
+    <span class="fake"><span>—</span><span>❐</span><span>✕</span></span>
+  </div>
+  <div id="menubar">
+    <span class="menu">File</span><span class="menu">View</span><span class="menu">Window</span>
+    <span class="menu">Options</span><span class="menu">Select</span><span class="menu">Help</span>
+  </div>
+  <div id="toolbars">
+    <div class="trow" id="trow1"></div>
+    <div class="trow" id="trow2"></div>
+    <div class="trow trow3" id="trow3"></div>
+  </div>
+  <div id="main">
+    <div id="tilearea"><canvas id="plot"></canvas></div>
+    <div id="browser">
+      <div id="blocklist"></div>
+      <div class="bfoot">Click a block cell to display it</div>
+    </div>
+  </div>
+  <div id="statusbar">
+    <span class="cell" id="sbInfo">Ready</span>
+    <span class="cell" id="sbPos">BE: — eV · — CPS</span>
+    <span class="cell grow" id="sbHint">Drag on the spectrum to zoom (double-click to reset) · drag the blue bars to move region limits</span>
+    <span class="cell right" id="sbFile">No File</span>
+    <span class="cell right">NUM</span>
+  </div>
+
+  <!-- Quantification Parameters -->
+  <div id="qwin">
+    <div id="qtitle"><span class="qico"></span>Quantification Parameters
+      <span class="qsys"><span>—</span><span>❐</span><span class="x" id="qclose">✕</span></span></div>
+    <div id="qtabs">
+      <span class="qtab active" data-tab="regions">Regions</span>
+      <span class="qtab" data-tab="components">Components</span>
+      <span class="qtab" data-tab="data">Data Editor</span>
+      <span class="qtab" data-tab="report">Report Spec.</span>
+      <span class="qtab" data-tab="rpt">RPT Report</span>
+    </div>
+    <div id="qbody"></div>
+  </div>
+
+  <!-- Background Types (CTRL+left-click on a BG Type cell) -->
+  <div id="bgdlg">
+    <div id="bgtitle">Background Types<span class="x" id="bgclose">✕</span></div>
+    <div id="bgbody">
+      <div id="bglist"><div class="lh">Background Name</div></div>
+      <div id="bgok"><button class="wbtn" id="bgOkBtn">OK</button><button class="wbtn" id="bgCancelBtn">Cancel</button></div>
+    </div>
+  </div>
+
+  <div id="mockhost"></div>
+  <div id="menudrop" class="menudrop"></div>
+
+  <!-- HarwellXPS trainer -->
+  <div id="spot"></div>
+  <div id="tutor">
+    <div class="thead">
+      <span class="logo">Harwell<b>XPS</b> · Trainer</span>
+      <span class="steps" id="tStepNo">1/9</span>
+      <button class="mini" id="tMin" title="Minimise the guide">–</button>
+    </div>
+    <div id="tbody2">
+      <div class="do" id="tDo"></div>
+      <div class="why" id="tWhy"></div>
+      <div class="state wait" id="tState">Waiting for you to do this…</div>
+      <div class="tnav">
+        <span class="dots" id="tDots"></span>
+        <button class="hxbtn ghost" id="tBack">Back</button>
+        <button class="skip" id="tSkip">skip</button>
+      </div>
+    </div>
+  </div>
+  <button id="tutorpill">Harwell<b>XPS</b> guide — reopen</button>
+  <div id="endcard"><div class="card">
+    <h2 id="endTitle">Guide complete</h2>
+    <p id="endText"></p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+      <button class="hxbtn" id="endFree">Explore freely</button>
+      <button class="hxbtn ghost" id="endRestart">Restart guide</button>
+    </div>
+  </div></div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   CONFIG — everything a new training guide edits lives between the markers.
+   DATASET blocks come from a VAMAS file (parsed offline to JSON):
+     { id, species, transition, beStart (high BE end NOT required — beStart is
+       the BE of counts[0]), beStep (signed), rsf, counts[] }
+   TUTORIAL steps: { do, why, spot, detect:{event, test?} , onEnter? }
+     spot: css selector, or "plot", or {region:"limits"} etc (see spotFor)
+     detect.event: one of the EVENTS emitted by the app; test(payload,app)->bool
+   ============================================================================ */
+/* ==== CONFIG START ==== */
+const DATASET = {"source": "SiTemplate.vms (Kratos Axis Ultra) \u2014 CasaXPS distribution example", "blocks": [{"id": "survey/2", "species": "Wide", "transition": "None", "title": "Survey  \u00b7  survey/2  \u00b7  PE 160", "beStart": 600.0, "beStep": -1.0, "rsf": 1.0, "counts": [4009.0, 4020.0, 4050.0, 3950.0, 3975.0, 4038.0, 4032.0, 4141.0, 4174.0, 4083.0, 4067.0, 4156.0, 4201.0, 4167.0, 4172.0, 4097.0, 4108.0, 4187.0, 4251.0, 4209.0, 4167.0, 4202.0, 4224.0, 4212.0, 4315.0, 4346.0, 4383.0, 4406.0, 4337.0, 4465.0, 4395.0, 4410.0, 4299.0, 4356.0, 4525.0, 4513.0, 4607.0, 4732.0, 4829.0, 5055.0, 5119.0, 5159.0, 5146.0, 5307.0, 5362.0, 5358.0, 5238.0, 5139.0, 4796.0, 4809.0, 4803.0, 4700.0, 4716.0, 4510.0, 4428.0, 4299.0, 4281.0, 4197.0, 4114.0, 4090.0, 4063.0, 4186.0, 4196.0, 4391.0, 5194.0, 9091.0, 19389.0, 23594.0, 14766.0, 6389.0, 4339.0, 3927.0, 3830.0, 3727.0, 3741.0, 3635.0, 3602.0, 3571.0, 3627.0, 3636.0, 3527.0, 3557.0, 3606.0, 3623.0, 3595.0, 3618.0, 3642.0, 3693.0, 3695.0, 3673.0, 3609.0, 3623.0, 3641.0, 3696.0, 3710.0, 3721.0, 3708.0, 3748.0, 3737.0, 3762.0, 3760.0, 3745.0, 3770.0, 3747.0, 3756.0, 3795.0, 3803.0, 3760.0, 3772.0, 3806.0, 3832.0, 3780.0, 3774.0, 3877.0, 3863.0, 3820.0, 3797.0, 3883.0, 3862.0, 3886.0, 3870.0, 3907.0, 3899.0, 3896.0, 3841.0, 3934.0, 3831.0, 3822.0, 3931.0, 3905.0, 3898.0, 3869.0, 3989.0, 3931.0, 3930.0, 3895.0, 3967.0, 3952.0, 3948.0, 3968.0, 3942.0, 3909.0, 4007.0, 4032.0, 4033.0, 4027.0, 3944.0, 4074.0, 4090.0, 4038.0, 4015.0, 4062.0, 4121.0, 4059.0, 4083.0, 4055.0, 4147.0, 4113.0, 4071.0, 4146.0, 4143.0, 4155.0, 4150.0, 4208.0, 4264.0, 4220.0, 4139.0, 4167.0, 4219.0, 4161.0, 4174.0, 4188.0, 4213.0, 4173.0, 4166.0, 4218.0, 4283.0, 4207.0, 4297.0, 4298.0, 4201.0, 4308.0, 4278.0, 4289.0, 4297.0, 4228.0, 4198.0, 4171.0, 4426.0, 4373.0, 4343.0, 4401.0, 4397.0, 4395.0, 4333.0, 4332.0, 4343.0, 4410.0, 4444.0, 4460.0, 4527.0, 4542.0, 4531.0, 4385.0, 4367.0, 4493.0, 4473.0, 4466.0, 4512.0, 4508.0, 4523.0, 4577.0, 4586.0, 4573.0, 4583.0, 4443.0, 4546.0, 4570.0, 4609.0, 4626.0, 4642.0, 4603.0, 4559.0, 4522.0, 4548.0, 4666.0, 4569.0, 4620.0, 4643.0, 4657.0, 4686.0, 4694.0, 4667.0, 4562.0, 4572.0, 4632.0, 4640.0, 4525.0, 4613.0, 4677.0, 4624.0, 4754.0, 4762.0, 4718.0, 4778.0, 4772.0, 4762.0, 4753.0, 4738.0, 4819.0, 4701.0, 4700.0, 4762.0, 4838.0, 4892.0, 4889.0, 4841.0, 4876.0, 4924.0, 4917.0, 4841.0, 4919.0, 4903.0, 4842.0, 5048.0, 4981.0, 5059.0, 4948.0, 5026.0, 5018.0, 4976.0, 4934.0, 4974.0, 5013.0, 4963.0, 5069.0, 5115.0, 5148.0, 5118.0, 5062.0, 5140.0, 5095.0, 5106.0, 5235.0, 5265.0, 5124.0, 5265.0, 5248.0, 5199.0, 5252.0, 5296.0, 5332.0, 5208.0, 5292.0, 5413.0, 5252.0, 5246.0, 5246.0, 5210.0, 5165.0, 5251.0, 5270.0, 5178.0, 5248.0, 5160.0, 5277.0, 5298.0, 5206.0, 5220.0, 5227.0, 5387.0, 5545.0, 6050.0, 6657.0, 8066.0, 8203.0, 6765.0, 5544.0, 5278.0, 5233.0, 5310.0, 5306.0, 5187.0, 5176.0, 5308.0, 5289.0, 5282.0, 5210.0, 5333.0, 5364.0, 5351.0, 5424.0, 5285.0, 5372.0, 5397.0, 5312.0, 5359.0, 5457.0, 5521.0, 5540.0, 5546.0, 5546.0, 5407.0, 5421.0, 5496.0, 5452.0, 5453.0, 5513.0, 5556.0, 5570.0, 5565.0, 5614.0, 5613.0, 5719.0, 5696.0, 5668.0, 5662.0, 5646.0, 5723.0, 5779.0, 5784.0, 5758.0, 5767.0, 5830.0, 5880.0, 5836.0, 5805.0, 5820.0, 5832.0, 5829.0, 5918.0, 5895.0, 5869.0, 5879.0, 5976.0, 6011.0, 6192.0, 6218.0, 6166.0, 6184.0, 6105.0, 6112.0, 6181.0, 6301.0, 6166.0, 6240.0, 6201.0, 6221.0, 6225.0, 6277.0, 6262.0, 6417.0, 6422.0, 6444.0, 6578.0, 6602.0, 6622.0, 6621.0, 6619.0, 6561.0, 6463.0, 6466.0, 6414.0, 6450.0, 6471.0, 6422.0, 6368.0, 6528.0, 6672.0, 6833.0, 6888.0, 6951.0, 7127.0, 7350.0, 7344.0, 7148.0, 6866.0, 6794.0, 6600.0, 6344.0, 6340.0, 6283.0, 6452.0, 6363.0, 6479.0, 6675.0, 6740.0, 6986.0, 7477.0, 7878.0, 8515.0, 8739.0, 8423.0, 7551.0, 6743.0, 6035.0, 5584.0, 5297.0, 5133.0, 5084.0, 5002.0, 4964.0, 5154.0, 5746.0, 6759.0, 8070.0, 8599.0, 10866.0, 15225.0, 14081.0, 8211.0, 5070.0, 4215.0, 3874.0, 3730.0, 3459.0, 3454.0, 3407.0, 3501.0, 3544.0, 3652.0, 3727.0, 3874.0, 3990.0, 4081.0, 4092.0, 4050.0, 3800.0, 3585.0, 3388.0, 3135.0, 3021.0, 3071.0, 3019.0, 3040.0, 3067.0, 3105.0, 3236.0, 3438.0, 3656.0, 4182.0, 4793.0, 5133.0, 5090.0, 4249.0, 3436.0, 2750.0, 2239.0, 1957.0, 1720.0, 1622.0, 1583.0, 1573.0, 1550.0, 1771.0, 2880.0, 4361.0, 4253.0, 4866.0, 10956.0, 12289.0, 5282.0, 1033.0, 576.0, 466.0, 380.0, 359.0, 318.0, 315.0, 315.0, 289.0, 283.0, 324.0, 308.0, 297.0, 296.0, 285.0, 304.0, 307.0, 308.0, 305.0, 286.0, 295.0, 288.0, 307.0, 301.0, 318.0, 318.0, 289.0, 285.0, 282.0, 308.0, 289.0, 307.0, 314.0, 318.0, 345.0, 323.0, 340.0, 321.0, 343.0, 324.0, 310.0, 309.0, 326.0, 331.0, 342.0, 321.0, 323.0, 338.0, 333.0, 364.0, 340.0, 341.0, 340.0, 328.0, 328.0, 339.0, 347.0, 332.0, 351.0, 346.0, 335.0, 341.0, 306.0, 327.0, 304.0, 334.0, 370.0, 406.0, 397.0, 443.0, 541.0, 618.0, 723.0, 686.0, 565.0, 398.0, 292.0, 277.0, 256.0, 251.0, 179.0, 182.0, 206.0, 267.0, 299.0, 330.0, 348.0, 364.0, 364.0, 373.0, 392.0, 353.0, 290.0, 242.0, 243.0, 216.0, 120.0, 74.0, 17.0, 7.0, 5.0, 3.0, 4.0, 0.0]}, {"id": "O 1s/3", "species": "O", "transition": "1s", "title": "O 1s  \u00b7  O 1s/3  \u00b7  PE 20", "beStart": 543.05, "beStep": -0.1, "rsf": 2.93, "counts": [1937.0, 1983.0, 1987.0, 1993.0, 1975.0, 1902.0, 1883.0, 1894.0, 1978.0, 1973.0, 1888.0, 1913.0, 1931.0, 1930.0, 1838.0, 1860.0, 1865.0, 1879.0, 1825.0, 1911.0, 1911.0, 1878.0, 1870.0, 1854.0, 1856.0, 1873.0, 1849.0, 1845.0, 1869.0, 1802.0, 1824.0, 1876.0, 1897.0, 1865.0, 1861.0, 1891.0, 1896.0, 1842.0, 1849.0, 1854.0, 1823.0, 1869.0, 1848.0, 1822.0, 1882.0, 1820.0, 1889.0, 1895.0, 1891.0, 1863.0, 1836.0, 1861.0, 1843.0, 1829.0, 1822.0, 1901.0, 1878.0, 1814.0, 1851.0, 1822.0, 1902.0, 1921.0, 1929.0, 1919.0, 1995.0, 1995.0, 2080.0, 2038.0, 2103.0, 2145.0, 2233.0, 2243.0, 2288.0, 2320.0, 2338.0, 2396.0, 2482.0, 2696.0, 2851.0, 3018.0, 3234.0, 3566.0, 3862.0, 4404.0, 5065.0, 5825.0, 6755.0, 7920.0, 9122.0, 10570.0, 12087.0, 13531.0, 15066.0, 16118.0, 17040.0, 17910.0, 18065.0, 17789.0, 17033.0, 16059.0, 14914.0, 13507.0, 11972.0, 10414.0, 9106.0, 7712.0, 6621.0, 5696.0, 4856.0, 4189.0, 3640.0, 3181.0, 2843.0, 2670.0, 2438.0, 2322.0, 2222.0, 2115.0, 2066.0, 2022.0, 1962.0, 1985.0, 1900.0, 1877.0, 1856.0, 1809.0, 1874.0, 1902.0, 1844.0, 1805.0, 1810.0, 1764.0, 1796.0, 1805.0, 1807.0, 1787.0, 1764.0, 1782.0, 1773.0, 1782.0, 1764.0, 1707.0, 1768.0, 1736.0, 1738.0, 1702.0, 1741.0, 1710.0, 1642.0, 1682.0, 1742.0, 1699.0, 1712.0, 1699.0, 1747.0, 1701.0, 1755.0, 1728.0, 1677.0, 1728.0, 1746.0, 1749.0, 1684.0, 1717.0, 1773.0, 1783.0, 1704.0, 1727.0, 1767.0, 1774.0, 1742.0, 1780.0, 1742.0, 1696.0, 1699.0, 1684.0, 1724.0, 1764.0, 1670.0, 1690.0, 1734.0, 1698.0, 1694.0]}, {"id": "Si 2p/4", "species": "Si", "transition": "2p", "title": "Si 2p  \u00b7  Si 2p/4  \u00b7  PE 20", "beStart": 108.0, "beStep": -0.1, "rsf": 0.8401, "counts": [785.0, 788.0, 762.0, 775.0, 786.0, 768.0, 760.0, 771.0, 762.0, 725.0, 735.0, 722.0, 721.0, 731.0, 731.0, 748.0, 691.0, 736.0, 736.0, 731.0, 716.0, 747.0, 775.0, 770.0, 802.0, 828.0, 911.0, 937.0, 1026.0, 1104.0, 1186.0, 1364.0, 1523.0, 1809.0, 1985.0, 2223.0, 2454.0, 2596.0, 2767.0, 2955.0, 3076.0, 3150.0, 3241.0, 3261.0, 3148.0, 3088.0, 3031.0, 2782.0, 2617.0, 2452.0, 2225.0, 2151.0, 1917.0, 1773.0, 1648.0, 1585.0, 1482.0, 1495.0, 1420.0, 1327.0, 1336.0, 1310.0, 1354.0, 1374.0, 1478.0, 1694.0, 1952.0, 2483.0, 3300.0, 4611.0, 6332.0, 8357.0, 10094.0, 10771.0, 10932.0, 11455.0, 12900.0, 15348.0, 16854.0, 16533.0, 13977.0, 10131.0, 6984.0, 4456.0, 2650.0, 1601.0, 989.0, 644.0, 429.0, 357.0, 268.0, 268.0, 236.0, 213.0, 186.0, 217.0, 189.0, 214.0, 203.0, 174.0, 197.0, 215.0, 185.0, 203.0, 201.0, 181.0, 173.0, 182.0, 179.0, 143.0, 170.0, 183.0, 165.0, 152.0, 177.0, 172.0, 171.0, 163.0, 169.0, 155.0, 145.0, 151.0, 154.0, 153.0, 143.0, 162.0, 142.0, 169.0, 139.0, 143.0, 149.0, 148.0]}]};
+
+const APP_TITLE = "Mini-Casa — HarwellXPS training simulator";
+
+/* Real-toolbar mode: paste base64 PNG slices of an actual CasaXPS toolbar
+   screenshot (one per row) and the whole toolbar becomes pixel-identical,
+   greyed by CSS with only the Quantify (F7) button cut out in colour.
+   quant.x0/x1 locate that button as fractions of the row's width.
+   Leave rows empty ("") to use the drawn approximation instead. */
+const TOOLBAR = {
+  /* Real CasaXPS 2.3.27 toolbars, extracted from the annotated cheat sheet.
+     TWO MODES like real Casa: "right" = right-hand pane activated (block ops
+     live), "left" = left-hand pane activated (zoom/display toggles live).
+     Clicking the spectrum vs the browser switches them. hotspots lists the
+     LIVE buttons per mode: {row, x0, x1 (fractions of row width), id, tip,
+     action}. action: "quantify" or "mock:<id>". Everything else is greyed. */
+  modes: {
+    right: {
+      rows: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABHYAAAAYBAMAAABtrmeKAAAAJFBMVEX////w8PD//wAA///j4+OgoKCAgABpaWkAgID/AP//AAAAAADRicEpAAAI9ElEQVR42u2aT4gb1x3HP7No1plRIBK1L4WWnHpoSy+FHFpDdZBSaAIdw2oCaxpPYLPCm0PlnrruoTl1m16sHLLObloyDVhNRy6ZQJLSjCEq+NJDIJde09JDc4hhZYiektXU6uH9mZFWo13M0irYv8s+/ea93+83v/f9/Xlv1qrykB7SfVEJOMh+tjtmeOaLB4LtnpYDTiboSgiTQeGq2ccLdC0Hdko1/cuibp585U8PBPv903LACQUBi1bNPF6gazmww4fm17f+85EeP/mAsE/NAScS9G2A4lVHHi/QtRzYgQjwM24kAj10Q1/+AUAEarKa74aYqXW4paXWSPuL2XkbZHCl/ULZpS7sA+ntRZYcw1ZD/Z5R/oVzdAAJDahm1cM6W+g/XW/mt42hsn8y/A58Lc4LyquXelYe/8fZKZfcyg/UZmTuXhrsDD3K3QwvvusKNd71QzaAuAtI748mAbh6IyK9ahzbT2tk9Ggew56iHuDJ2eO5skXg7qutz1uSn13I3ov/LNkNAMqrcutG27ntU7jygXKsZy4iZ6ctpQ2lludyz1S4QUToZntdTho55Eyph3Lc+Mvox+bn+R7YaUW6JvPf9RZ7LBt2ANZXzU4hIv1eAVu7mVdELqbUDKGDi2b/nUd1da6Ma/qFq6W57LoJqBoXSvTtMeB8htMZOdYmcI3RpNPeG8lNYvN7auEPnjCWDMp0HKo+MAGHzqF8B2cPrIoysL0zkrNdEYmt3RcUVj7aITSm0wDKrALDxkn8FuqGNvYoxwzzz4QKN4IwIIvCYSO2NgxUp9Vzw0s+yYmYNEmJpcsw/nPbe6N2GCwhdmIZIpEwQSsDKMwAM86tlFvq7rpZhRt4WX61qZv6NJc9jvEkkPq1t7x36XnAqDKi1RltA1zpVD7Zjv69LQM1CGXZUg2ltOTsyGl3rnYArFp3Z7v1x5HMjK29lutllj6v8ynhluxH19P3Lrn76RyPlGO5088BiQLDxpFZljXfnxGAUOEmBCoK3wMILnZNnM6qL99o8bGRWeozwKvon572pCO2KsuYd4aNtwHcZ5wIfB/glb9HIPw8wGZJBK7QpSVJTX0q1fuf6vpUn8+mCrfNIaIyOLoZYrOD39H1a+iVo98CTHBG9/eyWYqkG0RZ6pwmmXdiWcq/S7vz4dtH5rita6YSTT24FwCvhkLVwQip8fMA+F0sitQnw5+9+GxOzNCjb+sUnfZMGHB9eylrlqLH2NS9grMNvLlwvRvi6z1p9HNlq3bT1KfS2JStXvNmrmzZtZsVPYrXdFLbGzkvbwK40UGnpRqLiCFsPgFgZTcd6WCn7VyT4j5w2s7enfJCa7eyAn0IrM/kndif6nDlXcr1fEdrWmKnoHJ8/nOJ9BLwLLAifIB7XwdomF55Rn1CeY8kOz+dj3vYMcqVpebYYP/Mnr/E2LkLHMrhaOf4UPZdd1dfVQ1g4KU6mWDn5im21c+zE9MmjFXNAkzNQmzu/zQcbKu88zphRdw+asHoaseUAl2zpqijOyYQoQl8CCCd28oUdDiXEoYviGPC3/1mhr4QWJENsfsbgPhCgfpGcpA/q5VKa5BSuqnCsKdTtf/7bbHceWdfHzmc7ZUYIrEBjCOg9xQAVyNQ++uG+IHKU0lKkuXXUp04NX2xipw1YsOuQ/+OYo8rNeWo98NndHfpRgOCju4jhu5EVtVxNIBYWvK3C9HgNYnA9OXKxHrrh1JIdBCN35WojKhGym439F3ZK7POqo+7Ozc57ebPBJc77Z9kOctUvV8F0yVu3hl9pdjts+q9ECbD/CkLu2K26EKWqjv+MmPnrtPTOWO0840e8JQ5R+tQbwGOyTuhKupWhcat+liW6Fx2GZhynfZsTBCpzdX1QtWsccxY1SyxuU90IGuWz+tKC/3p0339s78qeb1S7bwe1ns6v2V2jyqtKlcqQgX+VA2TO7gKINww45/pmCZ4mN0cue1rpktMTGc9S/eK8dMF54j6bFOaAOk72jVjb8IS0py880oMPNkFnF9cBOygBNAExnJ/nY45Z8m+2gWw64wZ6Pwim03AbmTHszWILbP3XmyU2vruPbW9C3rtVyNGSrYbMdwNVDXJWWLl7ovONQ3b9g6a2oBs9uQAQN4+rLPaD4P5zbLvhubq5XKH64o57IGvTCjsOsQ/gcfdcAMIgBWpT7wI/LIcb2R554OiXh3GMbbX855Wb5Ba8OXAzmEM2AHAqGdgJP13I/ORPCwKH5N3kgFeQlID0l7W1SQDPJN2sFnTm2r3c+DJ0hGILW9W9j5cnNreG7OzT8guq364C8InKGriVIJxc73P7iXADWZaIlc0wi2R1axHfg28KsdvoAAEK/86kndgklP/2F1yCKlSwrLHqmp5t403L+8uNXZey/BS7hkYLWyXZW6wqmBVzMvfUfixqhl+cmygNnVhslD2qZBVAdeX36bXWe2H87EjD91DCcA9+CJUl6SNDCL5jjXIW7jyBvpaQ/iEgfoE8sibwDB3zipWLzM4mHNnWkrt5O5Z1aMvz9Wgxk45MQ6xm5hvPk1AdI8RkfsWZtez+8M14KYpW3PYyWDqJHac7HI54eSHjOqcqZMDOFxtvwSI1RlcJuabhL5XrgKIDrD1B3QQGLzkD2BbUVZ7/Gnr9U7/SH7PMiExqx6rQnY53f8UsCmreOrXadxa3prl5yN9niNEE4gkAi6H6l7nyIJkAJzT9ckkk7lsu6FRlGpMAc9L2d2jsvfVzLwludknYJM0yt3gJfVqbv77b14R5Zihl7/4O4LDmT6lKBUEhUliRv0MpbJXjivmbtCuyduJy+FSn7MK33YuvGaqQjVfsxezk4EBVzIwj4R/v5Ycz078JPcVulhT9kVLDRZ8RycSxT2vEAsr/RGV1pRvpKvWAMb97x9n9DJj59QpByjruH98TW+dgrnC5ySeL8B8AZ1pwZlW0TyNVOvRj+Hj6klCboaRyiuGanzuy3DOekhLRVUK7x6XATtW9t+MnM3GDwb7fy3omFUn1/X/J6sKmw9yXO9zSg44maDDEFaDwlWzjxfoWg7sPKSHdD/0X6j66U0wGzWZAAAAAElFTkSuQmCC", "data:image/png;base64,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", "data:image/png;base64,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"],
+      hotspots: [
+        { row: 0, x0: 0.4948, x1: 0.5149, id: "btnQuantify", tip: "Quantify (F7)", action: "quantify" }
+      ]
+    },
+    left: {
+      rows: ["data:image/png;base64,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", "data:image/png;base64,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", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABJAAAAAoCAMAAACW2PAQAAAANlBMVEX////w8PD//wAA//8A/wDj4+OgoKCAgABpaWkAgIAAgAD/AP//AACAAICAAAAAAP8AAIAAAACLcsd6AAAOcklEQVR42u2di4KbLBOG8d/8pmvGNdz/zX4cdYAZGIxpbSpN0mz7rocIjy/DQNRwlatc5SonKUpUfn2ArPOM/2b5B12G64w/YOddQPq/oIy/PkDWecZ/s/yDLsN1xh+w8z4gCUT2CP56WecZ/83yD7oM1xl/wM7/KJB0o/TJchcolOW/kF0ayc6R/KtR2AsPxRuinnRuPf6z1v7VlUx+Zll/xWv1DF6rUczWyqqGC5K1t4bO+GaL34R/53+8hZ9vYau3UBZXbkXpOOP+j3tslA7ZXiC1TisASSZ7L5CYT4evEeWnY3der0WHAWkAv0EYGkBCbXdtw7EpN4BEHcyZZfl9Id414l9bo+eBBEABSXBR863VSKOVPWSvi+/8aShdoWC6WRpI+GV9UkCyGyOIFHd+q5Y3AUnJZbuBxG7V/A8CEnAFyxya2IKAJJLldmdZxuTRAJL9BYBpkgAp1iUeSGsLy+783IU32wGrBDXoFpDia3y2gBSOoMWG88kSIIXPe30mP7BAgjqQNjJo3QKSr+P+aX/OgAQ5kCAHUr45X4nMqdrboOKBFF43IN1YIKnlICCxXuZ8QFq2Yja12YsMSEiG68SnAEkLgZQ3N/ZOpAfz2WiwN3stA1J4g52SDEiJ/MyyKpAUA6RoPWzzNPVtUVAFkkLbKYGEzEzubTIgAQUkkAHJ2qMWkHxnbe3BEUBa7KPouCEg6YxK6GcSSL7TkLwoAkiErACSI0TohSj/yGT7gZT0cXggMa65BBLRn6OA1Jahm6Ip42ieyaMBJKpDWwGSPhJIvpIbWxn6IR1A+hIAacNWaqwyNpxOtgdICC5dQGK6bLF/aAlino/Hwx1uDiTAQLLvoAdIEoeEn6xDUmXH7QUgmaPytNheFOmQClkJpMG/DBuQhuFIIHnGpEDyt/YESMtSAgnJPGmKykAD6ZEUDkgQH91A6nRIPUCSxJDsPRJ2OCTUqhkgpQ0dH1LChhPKdgApEGafQ1rNTwYk1QSSvQt++ern0GTrYAmkeCSL30evQ2oAyZmjouPGA2kzW3WH1AISISOANPpfturBP94EpEibBpD8u/cDyVx0cBde62kak8exMST/EMWQJEAy27FdNlEMCbmJpFULgcT0nk4o2w2kji4bjiEld5lQVdYNNrtsazHvlXt1MVMBkI50SKHjdgSQeOuzwyE5JrntDv5xKJAAAwlYIC0YSAsPJLo7VgCpIUvDmBZIUw+Q2C4bZMJpWYEEbSBlSKqMZoB0lK1kXgNIGcC+yN7TCWUEkBSOQbeBBP5F7JBKIK1bRNYrvu0b9tfrzdu2hTc6JLsHCZDCcF2XQ/JNRe1wSN5fvckh+V6R6xZBdEvGYBRACncpG+GObqmMIcXLvF53FkjYIa0mqYwhtbJGOh0SDSTlx8QEQJIFtdf8I+gDkt5aNQ2kootHh3POKMMfVCuHpwCSq5rqWCBpjV5fBJJpLq6yVxwSDV/lrQ3rkFxjqwFpdo+Ebn0xpBRIIodkTnAIcaO3OCQV4zQrARgguQoByxpweyeQ+CqRAImtOu8AkniUDQY6M5IHUmy9aORfBCS693RGWRVIsFSBZBr/ArHfdhCQNPqj2IxHzWVjlkCyW6o4pJhptR3j/R5+YhIjRQ5JCiQ2hrTDIfkA0rscUsTQiAJKBJAihgAFlDggEd0xCkg1maLCPXEwAwPpf2XRPr+E77JNBZDUsUASZfSXncE0FWlHluaZZSWQQAYk3/bRbTAUDCTXtT+oyyYDEuRACs6Wd0hFdb7fwz4KIKUdNxGQUBDp3Q7JGiRHpPc4pAxI7tq2geTiSCyQsEPyJokEEnZI3iQdBqSaQ5oCkCYEpEYMaY2OVGNIgpR2vPW6/GuH/MyyAkixJgELpHzYXy2KSYwMQBIFtbU3M9Ft+ySNfocUWs4id0j9QJI4pNkAKUu5fLNDisNz41sc0lortmF/gBJISwwtbsP+psm/FUhoqGMbtCuBhGQRSHY7ciBt4apXp45kde5RjDhmhKnKSyClF/CRZi1sbHhJFkYdBTLVudM9QMoSIxtAak4dQXlIWWSBA5LOs5qKfuKipDGkAkVNIC15bmQCJG+KpEAic6oph/RnM7W36whpHlIKpLU7qxqZ2ocCSeWRbRpIqzPCQKp12VYgmdOatlM7GkjjXfcAKZc3gBTlMTbKsKFTFtpge2ta9+6UB5L12stCAilLyF2UcC6baZb1TG0ZkHQmLHfqB3i8Q1JihzQ7Ft0DkTgg8ZNr8aZmNTemZLKDCCcEEjuXLR32Z+eyUcP+pwBS+LU6kKYWkNKOR7MnktbdCb57gJTLG0CK8gZp8FZFsipp8E4rDomU8UACAZBgB5ACNXsn16ZjMnmvjdrpIslDSiliUHSfSyAlx3TLD3I3kKpxzQtIciBlvTYOSFmvrQNIUwNIYfqlGwBcfwr/wgNJhzb0kAGJlrNA8n9jOYmQnTIGSKmMBVJFVgMStIG0KNjjkBggFYPBFJA0ejbWPBHkIWkMEcsiEki4wt3yCvcPAInLK6QytYnVIN4OJIWmkKjVGRdAWh2SB1KQSYCEgkjHOaQfv3uYZECi5SyQfrRv9BMe7i7ZkMu0SBayRBsyrUVb07IYkgFSEkTaD6Tn81lwR+9b6EhvqQFJv42ey9bnkDyQ5iMc0nwTAKk62/8C0p8Gkkv6djHtNpCc3YqVDf9E3vjj/3zbKqIhTXrigUTLWSB9z/YgYACcflOyIZcxDimTcUBKZWw/sSLLgRR9r4XRbwLSOMZJ6r53EGY/mDpMAEmjoLbuAFLTIRkcPWZrbFzHLQMSrnC3vMJRQDJEagOJbuRFDKk66SGd7V+XnQhIxY2HBlJWKkDCvbYKkHCvLciABJKD0eShJHZIAUjZ/CcOSHq0PZYfKZAYOQckI7dWBCOEAlIuY4CUyTjSHLC1FEgORuGyntMhoZm9Wh/okCyPLJBsGe+MQwpAyipcCSQ7xDZLHBLTV8sdEiUjHFJL9vKwfz5oWgJp2abX1oDEJmsX6yHRydoEkNCs/xqQVocUgQRsl22LI08Ch7SsIyjxhhX+hQXS/JzMu4c5AC0BEiPngGTlw/AwjV7XwjmZjENIsTU6hrR3a7VRtiRg3QASrHPZKCCFBSfzp+Ydkqlxq0P68jP+O9fN7Z7trxGPHg5JDwJIuMLd8gpHAsl22toOaYXIuPGDcEiUjHBILdkFpBJIoJpAWlwU6XiH9A3wo9TdtLJZAiRGzgHJyofhbhr9XAMSIaMQksk40uzbmgxIi4sisUDC09jEQe2WQ3qgeQIHA6nqkCKOfDnEIYmAZP72EBnDNP1BxQkgGEikjFoPqSE7F5DKXhsJpLLXVkuMrAAJD7GtQAq/VgHSIgHSrhjSCHbYezLt6CEBEiPngGTldmR98HLO02QyLjEylzFA2rm1alB7uww1IIWLH5cf4YDEZUbuckjsmtrqhdn+2g70z8myO7M/nv0xpNllaoMESBYiliBuMSOfW+0XWkuBRMgoIDVkryRGwjbHnwdSmOsnAhK9KhK1hC2xKlI2dSSLa5PD/iiaHYE0rOThgeQnLy57HFIDSHoCuNuZKAomLGeAxMkZIEX5MBDyM8toIMXLwAEJsBFRaeY+BSR9hENi19SWAIl1SPOc8egxq1HkkGpAghmEQBr8NP1hnYumhriSLSZNIaOBVJW9vEBbfn9hFmhbMiKdGUj+F0kgoROxudpHOyQbnn7+zK6v+TPPP36qFAskTs4AyUaMrdyOrhfyM8sKIKWXARqZ2vWpI+vCWcc4JG5N7SaQOCZ4ID0eTSB1OqR5BhADafAEiTFuvxj2UAAplzFAqskOGGWDZPo1O8qWVgsWSK3Z/m2Z0viOGHptLJDSXluQAQmkHKp1IHU7JPPf3/ZYvx+OMKbWfZuWOWsGSBU5BSQnN63dyG2jL+RnlqVAKi4DA6RtOZn1Zb0GuHn6TA59TAwpX1ObAhJ0A8kxKLTaRwxsj3d173dI88YjBbPYITl8DGpIv1WscEi0rHBIFdkRQAqxwzDznwWS67mtS/gxQDriW0d0UVF5IKFpIwhI9S4bXoDkQIdk65glzHh3hLnf77ZhPn40DaSKnAKSk5vWbuS20RfyM8saC7ShPhvzNUhQmXjvgUSO5+9wSLABKbyD0iEls/1lQMpSCOPof79DuoW0AcciGZDCwiJDmMHm8pBCStGQrN5fyOhF/quyY/KQog+B6reOxF6/B9L7vgbpHEDqdkimpk8uHPR0hHk+n9P9Pt4fPzSQKnIKSE5uIzRP1+gL+ZllrwIJVBNI9Jo1/XlIX7BlkX9B/BcAfrZ//NaRGpCS9EEbTLZY3BdDipNtA5BmYab2gAbsQwyp/NaRQsZlaldkhyVGxo5PDUix979Qy4+8AUg4MZJfDylJjExlDSCtfbZDHJIxBnjc0h6PaZnP+zcNpIqcApKV+7kZYc5YJj+zrLWELbRm+6dL0WRsCCmRugoknKk94NcsU3uDQPqVtPxsfymQ0kgtASSZQ7LmyA6w+U9DBKT4yaq0rzaW3zqSyyggNWRvmFz7x7+59sUF2nqA5O+uxwDJNAzIV0O0TXOkgVSRU0Cy8mxh3ER+ZlkTSGj0rN8hxRxt/ZuBFGb77wKS8cc7g9opnfM+W896SD4gdJq5bO0VDuUyrVu6Htmra2pzQCLLEqaSHDC5lkmHgYkGUkVOAQmAvJar/Myy9iL/y7o0bX8MqZw08kKXTZIYSda4biC9vvyIt0hr6V4P6VRAEqwBLZcdDCRZvZDIMJAEO39lgbZrCVvZErayGrWbDe+uUayMrUnbEo9U6V6gra8aCz/uTwPSaWWdZ/w3yz/oMlxn/Nt33mSxWHYB6QLS1TyvMz7dzruANErKrw+QdZ7x3yz/oMtwnfEH7LwLSL/+lRLP+B+Qf9BluM74A3beBaThKle5ylVOUv4D3vMgeNhhlT0AAAAASUVORK5CYII="],
+      hotspots: [
+        { row: 0, x0: 0.4777, x1: 0.4974, id: "btnQuantify", tip: "Quantify (F7)", action: "quantify" }
+      ]
+    }
+  },
+  start: "right"
+};
+
+const TUTORIAL = {
+  title: "Navigating spectra",
+  intro: true,
+  steps: [
+    {
+      do: "Welcome! This is a working miniature of CasaXPS. The grid on the right is the block browser \u2014 one row per VAMAS file, one cell per acquisition. Click the narrow scan \u201cSi 2p/4\u201d to display it.",
+      why: "CasaXPS never shows you \u2018a file\u2019 \u2014 it shows blocks. Every acquisition in the experiment (the survey, each narrow scan) is its own block, and clicking a cell displays that block in the active tile on the left. Everything you do afterwards \u2014 zooming, regions, fitting \u2014 applies to the displayed block, so knowing which block is up is navigation lesson number one.",
+      spot: "#blocklist",
+      detect: { event: "block-displayed", test: (p) => /si 2p/i.test(p.id) }
+    },
+    {
+      do: "Now click once anywhere on the spectrum itself \u2014 and keep an eye on the toolbar at the top while you do.",
+      why: "Real Casa has two toolbar modes. Click in the right pane (the browser) and the toolbar shows file and block operations; click in the left pane (the display tiles) and it swaps to display tools \u2014 the zoom group, rescale, step left/right. People lose whole minutes convinced a button has vanished when it is simply in the other mode. Both toolbars here are real CasaXPS 2.3.27 pixels; almost everything is greyed because this lesson needs only the mouse \u2014 spot how the one live button, Quantify (F7), shifts position as the rows swap.",
+      spot: "plot",
+      detect: { event: "pane-mode-changed", test: (p) => p.mode === "left" }
+    },
+    {
+      do: "Move the mouse slowly across the spectrum without clicking, and watch the second cell of the status bar at the bottom: it reads out the binding energy and counts under the cursor.",
+      why: "That readout is your ruler \u2014 far more reliable than eyeballing the axis. Sweep it across the two peaks: the strong one sits near 100 eV (elemental Si 2p) and the small one near 103.5 eV is SiO\u2082 \u2014 the ~4 eV chemical shift between them is the whole reason XPS is useful. Get in the habit of reading positions off the status bar before you ever fit anything.",
+      spot: "#sbPos",
+      ack: true
+    },
+    {
+      do: "Zoom in: press and hold the left mouse button on the plot, drag a box around the Si 2p region \u2014 roughly from 106 eV down to 96 eV \u2014 and release.",
+      why: "The drag-box is the core navigation gesture. The axes rescale to your box in BOTH directions, energy and counts, so a box that hugs the data also stretches it vertically \u2014 shoulders and asymmetry that are invisible at full scale suddenly show. In real Casa this gesture arms the zoom buttons in the left-mode toolbar; here the box applies directly on release.",
+      spot: "plot",
+      detect: { event: "zoomed", test: (p, app) => { const v = app.view; return v && (v.be0 - v.be1) <= 11 && v.be0 >= 100.7 && v.be1 <= 99.7; } }
+    },
+    {
+      do: "Double-click on the plot to reset the view to the full acquired range.",
+      why: "Never judge a spectrum at a single zoom level \u2014 flick between zoomed and full view constantly. In real CasaXPS the left-mode toolbar carries a whole zoom group: zoom out steps back through your zoom history, reset returns to the full range, and zoom in re-applies a drawn box. In this trainer, double-click is the reset.",
+      spot: "plot",
+      ack: true
+    },
+    {
+      do: "Zoom once more, tighter: box just the small oxide peak \u2014 roughly 106 eV down to 102 eV \u2014 so the big elemental peak is excluded.",
+      why: "This is why zooming matters chemically. The SiO\u2082 peak is about five times weaker than the elemental line, so at full scale it reads as a bump. Exclude the strong peak from your box and the counts axis rescales to the oxide alone \u2014 now you can judge its position (~103.5 eV), width and shape properly. Zooms nest: each new box zooms within the current view.",
+      spot: "plot",
+      detect: { event: "zoomed", test: (p, app) => { const v = app.view; return v && (v.be0 - v.be1) <= 6.5 && v.be0 >= 104 && v.be1 >= 100.9 && v.be1 <= 103; } }
+    },
+    {
+      do: "Finish back in the browser: click the \u201csurvey/2\u201d cell to display the wide scan \u2014 and notice the toolbar flip back to right-pane mode as you do.",
+      why: "Clicking in the browser reactivates the right pane, and displaying a block resets that tile\u2019s view, so the survey comes up at its full 600 eV range. Survey to identify, narrow scan to quantify, zoom to inspect \u2014 that display-and-zoom loop is the rhythm of every real Casa session, and you have just done a full lap of it.",
+      spot: "#blocklist",
+      detect: { event: "block-displayed", test: (p) => /survey/i.test(p.id) }
+    }
+  ],
+  end: {
+    title: "Navigation: in your hands",
+    text: "You can now display any block from the browser, switch toolbar pane modes, read binding energy and counts straight off the status bar, drag-box zoom into a region \u2014 nested as deep as you like \u2014 and reset with a double-click. Every gesture transfers click-for-click to real CasaXPS. Explore freely: display O 1s/3 and read its peak position from the status bar (~533 eV), or zoom the survey down onto each labelled line."
+  }
+};
+/* ==== CONFIG END ==== */
+
+/* ============================================================================
+   Simulator engine — nothing below changes between guides.
+   ============================================================================ */
+const $ = (s) => document.querySelector(s);
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const fmt = (v, d) => Number(v).toFixed(d === undefined ? 2 : d);
+
+/* ---- toolbar builder: three rows approximating CasaXPS 2.3.27 ----
+   Every button is greyed out except Quantification Parameters (the lesson's
+   one live control). Icons are approximations, not pixel copies. */
+function toolbarAction(action) {
+  if (action === "quantify") { openQuantify(); return; }
+  if (action && action.indexOf("mock:") === 0) { openMock(action.slice(5)); return; }
+}
+function actionAvailable(action) {
+  if (!TOOLBAR.modes) return false;
+  for (const m of Object.keys(TOOLBAR.modes)) {
+    if ((TOOLBAR.modes[m].hotspots || []).some((h) => h.action === action)) return true;
+  }
+  return false;
+}
+function renderToolbars(mode) {
+  const cfg = TOOLBAR.modes && (TOOLBAR.modes[mode] || TOOLBAR.modes.right);
+  if (!cfg || !cfg.rows || !cfg.rows[0]) return false;
+  for (let r = 0; r < 3; r++) {
+    const host = document.getElementById("trow" + (r + 1));
+    host.className = "trowimg";
+    host.innerHTML = "";
+    const inner = document.createElement("div");
+    inner.className = "tinner";
+    host.appendChild(inner);
+    const img = document.createElement("img");
+    img.className = "base"; img.src = cfg.rows[r]; img.alt = "";
+    img.addEventListener("load", () => {
+      inner.style.maxWidth = img.naturalWidth + "px";
+      try { draw(); } catch (e) { /* first paint pending */ }
+      try { tutor.respot(); } catch (e) { /* tutor not built yet */ }
+    });
+    inner.appendChild(img);
+    for (const h of (cfg.hotspots || [])) {
+      if (h.row !== r) continue;
+      const cut = document.createElement("div");
+      cut.className = "livecut";
+      cut.style.left = (h.x0 * 100) + "%";
+      cut.style.width = ((h.x1 - h.x0) * 100) + "%";
+      const ci = document.createElement("img");
+      ci.src = cfg.rows[r];
+      ci.style.width = (100 / (h.x1 - h.x0)) + "%";
+      ci.style.left = (-(h.x0 / (h.x1 - h.x0)) * 100) + "%";
+      cut.appendChild(ci);
+      inner.appendChild(cut);
+      const hot = document.createElement("button");
+      hot.type = "button"; hot.className = "hot";
+      if (h.id) hot.id = h.id;
+      hot.title = h.tip || "";
+      hot.style.left = cut.style.left; hot.style.width = cut.style.width;
+      hot.addEventListener("click", (e) => { e.stopPropagation(); toolbarAction(h.action); });
+      inner.appendChild(hot);
+    }
+    host.addEventListener("click", (e) => {
+      if (e.target && e.target.classList.contains("hot")) return;
+      const sb = document.getElementById("sbInfo");
+      if (sb) sb.textContent = "Greyed out in this trainer — hover the highlighted buttons for the live ones";
+    });
+  }
+  return true;
+}
+
+(function buildToolbars() {
+  if (renderToolbars((TOOLBAR.start || "right"))) return;
+  const sv = (inner, vb) => '<svg viewBox="0 0 ' + (vb || 17) + ' ' + (vb || 17) + '">' + inner + "</svg>";
+  const P = ["#F2C744", "#E86FA4", "#8E6FC8", "#5CC8D8", "#5B84D6", "#D65B5B", "#79B85C", "#D08A3E"];
+  const tile = (cols, rows, coloured) => {
+    let r = "";
+    const gw = 12 / cols, gh = 11 / rows;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const fill = coloured ? P[(x + y * cols) % P.length] : "#fff";
+      r += '<rect x="' + (2.5 + x * gw) + '" y="' + (3 + y * gh) + '" width="' + (gw - 0.8) + '" height="' + (gh - 0.8) + '" fill="' + fill + '" stroke="#777" stroke-width="0.7"/>';
+    }
+    return sv(r);
+  };
+  const chip = (c) => sv('<rect x="3" y="3" width="11" height="11" fill="' + c + '" stroke="#555"/>');
+  const lab = (t, fg, bg, size) => '<span style="font-size:' + (size || 8) + 'px;font-weight:700;color:' + (fg || "#222") +
+    (bg ? ";background:" + bg + ";padding:1px 2px;border:1px solid #999" : "") + ';line-height:1.05;text-align:center;white-space:pre">' + t + "</span>";
+  const specIcon = (stroke, fill, big) => sv('<rect x="1.5" y="1.5" width="' + (big ? 21 : 14) + '" height="' + (big ? 21 : 14) +
+    '" fill="#fff" stroke="#888" stroke-width="0.8"/><path d="' + (big
+      ? "M3 19 C8 18 8 6 12 6 C16 6 16 18 21 17.5"
+      : "M3 13 C6 12.5 6 5 8.5 5 C11 5 11 12.5 14 12.5") + '" fill="' + (fill || "none") + '" stroke="' + stroke + '" stroke-width="1.2"/>', big ? 24 : 17);
+  const G = {
+    page: sv('<path d="M4.5 1.5 h5.5 l3 3 V15.5 H4.5 Z" fill="#fff" stroke="#555"/><path d="M10 1.5 v3 h3" fill="none" stroke="#555"/>'),
+    folder: sv('<path d="M2 4.5 h5 l1.5 2 H15 V14 H2 Z" fill="#F6D372" stroke="#8A6D1B"/>'),
+    disk: sv('<rect x="2.5" y="2.5" width="12" height="12" fill="#3B6FD4" stroke="#1F3C77"/><rect x="5.5" y="2.5" width="6" height="4.5" fill="#fff"/><rect x="4.5" y="9" width="8" height="5.5" fill="#fff"/>'),
+    print: sv('<rect x="3" y="6" width="11" height="6" fill="#D8D8D8" stroke="#555"/><rect x="5" y="2.5" width="7" height="3.5" fill="#fff" stroke="#555"/><rect x="5" y="10.5" width="7" height="4.5" fill="#fff" stroke="#555"/>'),
+    copy: sv('<rect x="2.5" y="2.5" width="8" height="10" fill="#fff" stroke="#555"/><rect x="6.5" y="5" width="8" height="10" fill="#fff" stroke="#555"/>'),
+    paste: sv('<rect x="3" y="3" width="9" height="12" fill="#C9A96A" stroke="#7A5E2A"/><rect x="5.5" y="1.8" width="4" height="3" fill="#AAA" stroke="#666"/><rect x="7.5" y="6" width="7" height="9.5" fill="#fff" stroke="#555"/>'),
+    trash: sv('<path d="M4.5 5.5 h8 l-1 9.5 h-6 Z" fill="#D8D8D8" stroke="#555"/><path d="M3.5 5.5 h10 M6.5 5.5 V4 h4 V5.5" fill="none" stroke="#555"/>'),
+    gear: sv('<circle cx="8.5" cy="8.5" r="3.6" fill="none" stroke="#555" stroke-width="1.3"/><circle cx="8.5" cy="8.5" r="1.4" fill="#555"/><path d="M8.5 2.2 v2.6 M8.5 12.2 v2.6 M2.2 8.5 h2.6 M12.2 8.5 h2.6" stroke="#555" stroke-width="1.3"/>'),
+    help: sv('<text x="8.5" y="13" font-size="12.5" font-weight="bold" text-anchor="middle" fill="#3B6FD4">?</text>'),
+    arrR: sv('<path d="M3 8.5 h9 M9 5 l3.5 3.5 L9 12 M14 4 v9" fill="none" stroke="#2A6E2A" stroke-width="1.4"/>'),
+    arrL: sv('<path d="M14 8.5 h-9 M8 5 L4.5 8.5 L8 12 M3 4 v9" fill="none" stroke="#2A6E2A" stroke-width="1.4"/>'),
+    arrB: sv('<path d="M2.5 8.5 h12 M6 5 L2.8 8.5 L6 12 M11 5 l3.2 3.5 L11 12" fill="none" stroke="#2A6E2A" stroke-width="1.3"/>'),
+    monitor: sv('<rect x="2.5" y="3" width="12" height="8.5" fill="#BFE0F0" stroke="#555"/><path d="M6 14 h5 M8.5 11.5 v2.5" stroke="#555" stroke-width="1.2"/>'),
+    sigma: sv('<text x="8.5" y="13.5" font-size="13" font-weight="bold" text-anchor="middle" fill="#333">\u03A3</text>'),
+    burst: sv('<path d="M8.5 2 L10 7 L15 8.5 L10 10 L8.5 15 L7 10 L2 8.5 L7 7 Z" fill="#F2C744" stroke="#A8842A" stroke-width="0.8"/>'),
+    ruler: sv('<rect x="2" y="5" width="13" height="7" fill="#EFE6C8" stroke="#777"/><path d="M4.5 5 v2.5 M7 5 v3.5 M9.5 5 v2.5 M12 5 v3.5" stroke="#777"/>'),
+    quant: sv('<rect x="1" y="1" width="15" height="15" fill="#FFFDF4" stroke="#8A6D1B" stroke-width="0.6"/><path d="M2.8 13.5 C5.5 13 5.5 4.5 8.5 4.5 C11.5 4.5 11.5 13 14.2 12.7" fill="none" stroke="#D00" stroke-width="1.3"/><path d="M4.8 13.5 V6.5 M12.2 13.5 V6.5" stroke="#4848FF" stroke-width="1.5"/><path d="M2.8 13.8 h11.5" stroke="#804000" stroke-width="1.2"/>')
+  };
+  const row = (el, items) => {
+    for (const it of items) {
+      if (it === "|") { const sep = document.createElement("span"); sep.className = "tsep"; el.appendChild(sep); continue; }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tbtn " + (it.live ? "live" : "dead");
+      b.innerHTML = it.g;
+      b.title = it.live ? it.tip : "Greyed out in this trainer — only Quantify (F7) is live";
+      if (it.id) b.id = it.id;
+      el.appendChild(b);
+    }
+  };
+  const d = (g) => ({ g });
+  row(document.getElementById("trow1"), [
+    d(G.page), d(G.folder), d(G.disk), d(G.disk), d(G.print), "|",
+    d(G.copy), d(G.copy), d(G.paste), "|",
+    d(tile(1, 1)), d(tile(2, 1)), d(tile(1, 2)), d(tile(2, 2)), d(tile(3, 2)), d(tile(3, 3)), "|",
+    d(G.monitor), d(tile(2, 2, true)), d(tile(3, 2, true)), "|",
+    d(specIcon("#D00")), { g: G.quant, live: true, tip: "Quantify (F7)", id: "btnQuantify" },
+    d(sv('<text x="8.5" y="12.5" font-size="8" font-weight="bold" text-anchor="middle" fill="#333">BG</text><path d="M2.5 14.5 h12" stroke="#804000" stroke-width="1.3"/>')),
+    { g: lab("Blk\nCom", "#333"), lab: 1 }, { g: lab("Blk\nInfo", "#333") }, "|",
+    d(G.gear), d(G.trash), "|", d(G.print), d(G.page), d(G.help)
+  ]);
+  row(document.getElementById("trow2"), [
+    d(chip("#F2C744")), d(chip("#E86FA4")), d(chip("#8E6FC8")), d(chip("#5CC8D8")), "|",
+    d(chip("#5B84D6")), d(chip("#D65B5B")), "|",
+    d(G.arrR), d(G.arrL), d(G.arrB), d(G.arrR), "|",
+    d(sv('<path d="M3 3 h11 v11 h-11 Z" fill="none" stroke="#555"/><path d="M5.5 8.5 h6 M8.5 5.5 v6" stroke="#555" stroke-width="1.3"/>')),
+    d(sv('<path d="M3 3 h11 v11 h-11 Z" fill="none" stroke="#555"/><path d="M5.5 8.5 h6" stroke="#555" stroke-width="1.3"/>')), "|",
+    { g: lab("CPS\nC-C", "#333") }, { g: lab("BG\nSUB", "#333") }, { g: lab("Exp\nVar", "#333") }, { g: lab("Exp\nVDP", "#333") },
+    { g: lab("E\nLib", "#333") }, { g: lab("T\nFR", "#333") }, { g: lab("\u00b9\u2044\u2082", "#B4372E", null, 10) }, "|",
+    { g: lab("EDIT\nMODE", "#333") }
+  ]);
+  row(document.getElementById("trow3"), [
+    d(specIcon("#D00", "none", true)), d(specIcon("#2A6E2A", "none", true)), d(sv('<rect x="1.5" y="1.5" width="21" height="21" fill="#fff" stroke="#888" stroke-width="0.8"/><path d="M3 19 C8 18 8 6 12 6 C16 6 16 18 21 17.5 Z" fill="#E86FA4" stroke="#B4372E"/>', 24)),
+    d(tile(2, 2, true)), "|",
+    { g: lab("LS", "#0A6470", "#CFF3F6", 10) }, d(G.burst), "|",
+    { g: lab("PCA", "#5A2CA0", null, 10) },
+    { g: lab("AFs\n2", "#B4372E", null, 9) }, { g: lab("AFs\n3", "#B4372E", null, 9) }, { g: lab("AFs\n4", "#B4372E", null, 9) },
+    { g: lab("AFs\n5", "#B4372E", null, 9) }, { g: lab("AFs\n6", "#B4372E", null, 9) }, "|",
+    { g: lab("norm", "#333", null, 9) }, d(specIcon("#5B84D6", "none", true)), { g: lab("Bin", "#333", "#F6D372", 10) }, d(G.sigma),
+    d(sv('<path d="M3 20 V4 M3 20 H21" stroke="#333"/><rect x="6" y="12" width="3.5" height="8" fill="#5B84D6"/><rect x="12" y="8" width="3.5" height="12" fill="#D65B5B"/>', 24)), "|",
+    { g: lab("Diff", "#fff", "#D65B5B", 10) }, d(tile(3, 3, true)), { g: lab("L.A", "#0A6470", "#D9F2D0", 10) }, "|",
+    d(G.ruler), d(G.ruler), d(G.ruler)
+  ]);
+})();
+
+/* ---- state ---- */
+const app = {
+  blocks: DATASET.blocks.map((b, k) => ({ ...b, idx: k, regions: [] })),
+  cur: 0,
+  view: null,            // {be0, be1, c0, c1} current axis window (be0 > be1)
+  zoomStack: [],
+  regionSeq: 0,
+  dragging: null,        // {type:'limit', region, which} | {type:'zoom', x0,y0,x1,y1} | {type:'qwin',...}
+  quantifyOpenedOnce: false,
+  paneMode: "right",
+  listeners: {},
+  emit(ev, payload) {
+    (this.listeners[ev] || []).forEach((f) => { try { f(payload || {}); } catch (e) {} });
+  },
+  on(ev, f) { (this.listeners[ev] = this.listeners[ev] || []).push(f); },
+  block() { return this.blocks[this.cur]; },
+  currentRegions() { return this.block().regions; }
+};
+
+/* BE array for a block (ascending or descending as recorded; we normalise to arrays of {be, c}) */
+function beAt(b, i) { return b.beStart + b.beStep * i; }
+function beRange(b) {
+  const a = beAt(b, 0), z = beAt(b, b.counts.length - 1);
+  return { hi: Math.max(a, z), lo: Math.min(a, z) };
+}
+function idxForBe(b, be) {
+  const i = Math.round((be - b.beStart) / b.beStep);
+  return clamp(i, 0, b.counts.length - 1);
+}
+
+/* ---- background maths ---- */
+function endpointAvg(b, i, halfN) {
+  let s = 0, n = 0;
+  for (let k = i - halfN; k <= i + halfN; k++) {
+    if (k >= 0 && k < b.counts.length) { s += b.counts[k]; n++; }
+  }
+  return n ? s / n : b.counts[i];
+}
+/* Returns {iA, iB, bg: Float64Array over [iA..iB]} — iA index at region.start(high BE), iB at end(low BE) */
+function computeBackground(b, r) {
+  let iA = idxForBe(b, r.start), iB = idxForBe(b, r.end);
+  if (iA > iB) { const t = iA; iA = iB; iB = t; }
+  if (iB - iA < 3) iB = Math.min(b.counts.length - 1, iA + 3);
+  const n = iB - iA + 1;
+  const half = Math.max(0, Math.floor((r.avWidth - 1) / 2));
+  const yA = endpointAvg(b, iA, half);
+  const yB = endpointAvg(b, iB, half);
+  const bg = new Float64Array(n);
+  const data = b.counts;
+  if (r.bgType === "Linear") {
+    for (let i = 0; i < n; i++) bg[i] = yA + (yB - yA) * (i / (n - 1));
+  } else if (r.bgType === "Tougaard") {
+    /* Universal cross-section U2: B*T/(C+T^2)^2, C=1643 eV^2.
+       BE grid: high BE = larger loss side. Loss T = BE(point) - BE(j) for j at lower BE.
+       Background at i = B * sum over j>i? Define in BE-descending order: */
+    const step = Math.abs(b.beStep), C = 1643;
+    /* order indices by DESCENDING BE within region: element 0 = high BE */
+    const beA = beAt(b, iA), beB = beAt(b, iB);
+    const desc = (beA >= beB);
+    const J = new Float64Array(n);
+    for (let i = 0; i < n; i++) J[i] = data[iA + i];
+    const hiFirst = desc ? J : Float64Array.from(J).reverse();
+    const base = Math.min(yA, yB);
+    const raw = new Float64Array(n);
+    for (let i = 0; i < n; i++) {           // i: position, 0 = high BE
+      let s = 0;
+      for (let j = i + 1; j < n; j++) {     // j at lower BE contributes loss into i? (loss appears at HIGHER BE)
+        const T = (i - j) * -step * -1;     // BE_i - BE_j with i higher BE => positive
+        const t = (j - i) * step;
+        s += (t / ((C + t * t) * (C + t * t))) * Math.max(0, hiFirst[j] - base) * step;
+      }
+      raw[i] = s;
+    }
+    /* scale so background at high-BE endpoint equals averaged endpoint */
+    const target = (desc ? yA : yB) - base;
+    const scale = raw[0] > 0 ? target / raw[0] : 0;
+    const bgHi = new Float64Array(n);
+    for (let i = 0; i < n; i++) bgHi[i] = base + raw[i] * scale;
+    for (let i = 0; i < n; i++) bg[i] = desc ? bgHi[i] : bgHi[n - 1 - i];
+  } else { /* Shirley */
+    for (let i = 0; i < n; i++) bg[i] = yB + (yA - yB) * 0.5; // seed
+    /* orientation: which end is high BE? Shirley steps UP toward high BE. */
+    const beAi = beAt(b, iA);
+    const beBi = beAt(b, iB);
+    const hiIsA = beAi >= beBi;
+    const yHi = hiIsA ? yA : yB, yLo = hiIsA ? yB : yA;
+    for (let it = 0; it < 12; it++) {
+      /* total area above bg */
+      let total = 0;
+      const above = new Float64Array(n);
+      for (let i = 0; i < n; i++) { above[i] = Math.max(0, data[iA + i] - bg[i]); total += above[i]; }
+      if (total <= 0) break;
+      /* cumulative from LOW-BE end */
+      let acc = 0;
+      const next = new Float64Array(n);
+      if (hiIsA) {
+        /* index 0 = high BE, last = low BE: accumulate from last upward */
+        for (let i = n - 1; i >= 0; i--) { acc += above[i]; next[i] = yLo + (yHi - yLo) * (acc - above[i] / 2) / total; }
+      } else {
+        for (let i = 0; i < n; i++) { acc += above[i]; next[i] = yLo + (yHi - yLo) * (acc - above[i] / 2) / total; }
+      }
+      bg.set(next);
+    }
+  }
+  return { iA, iB, bg };
+}
+
+function regionMetrics(b, r) {
+  const { iA, iB, bg } = computeBackground(b, r);
+  const step = Math.abs(b.beStep);
+  let area = 0, hMax = -1, iMax = iA;
+  for (let i = iA; i <= iB; i++) {
+    const above = b.counts[i] - bg[i - iA];
+    area += above * step;
+    if (above > hMax) { hMax = above; iMax = i; }
+  }
+  /* FWHM by linear interpolation on background-subtracted data */
+  const half = hMax / 2;
+  let left = beAt(b, iMax), right = beAt(b, iMax);
+  for (let i = iMax; i >= iA; i--) {
+    const v = b.counts[i] - bg[i - iA];
+    if (v <= half) {
+      const v2 = b.counts[i + 1] - bg[i + 1 - iA];
+      const f = v2 !== v ? (half - v) / (v2 - v) : 0;
+      left = beAt(b, i) + f * b.beStep; break;
+    }
+  }
+  for (let i = iMax; i <= iB; i++) {
+    const v = b.counts[i] - bg[i - iA];
+    if (v <= half) {
+      const v2 = b.counts[i - 1] - bg[i - 1 - iA];
+      const f = v2 !== v ? (half - v) / (v2 - v) : 0;
+      right = beAt(b, i) - f * b.beStep; break;
+    }
+  }
+  return { area: Math.max(0, area), height: Math.max(0, hMax), pos: beAt(b, iMax), fwhm: Math.abs(left - right), iA, iB, bg };
+}
+
+/* ---- plotting ---- */
+const canvas = $("#plot");
+const ctx = canvas.getContext("2d");
+const PAGE_PAD = 16;
+function pageRect() {
+  return { x: PAGE_PAD, y: PAGE_PAD, w: canvas.clientWidth - PAGE_PAD * 2, h: canvas.clientHeight - PAGE_PAD * 2 };
+}
+const M = { l: 74, r: 28, t: 34, b: 56 };
+function plotRect() {
+  const g = pageRect();
+  return { x: g.x + M.l, y: g.y + M.t, w: g.w - M.l - M.r, h: g.h - M.t - M.b };
+}
+function defaultView() {
+  const b = app.block();
+  const { hi, lo } = beRange(b);
+  let cMax = -Infinity, cMin = Infinity;
+  for (const c of b.counts) { if (c > cMax) cMax = c; if (c < cMin) cMin = c; }
+  const pad = (cMax - cMin) * 0.06 || 1;
+  return { be0: hi, be1: lo, c0: Math.max(0, cMin - pad * 0.5), c1: cMax + pad };
+}
+function xPix(be) { const p = plotRect(), v = app.view; return p.x + (v.be0 - be) / (v.be0 - v.be1) * p.w; }
+function yPix(c) { const p = plotRect(), v = app.view; return p.y + p.h - (c - v.c0) / (v.c1 - v.c0) * p.h; }
+function beFromPix(x) { const p = plotRect(), v = app.view; return v.be0 - (x - p.x) / p.w * (v.be0 - v.be1); }
+function cFromPix(y) { const p = plotRect(), v = app.view; return v.c0 + (p.y + p.h - y) / p.h * (v.c1 - v.c0); }
+
+function niceTicks(a, b, target) {
+  const span = Math.abs(b - a);
+  const raw = span / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  let step = mag;
+  for (const m of [1, 2, 5, 10]) { if (raw / mag <= m) { step = m * mag; break; } }
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  const out = [];
+  for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) out.push(t);
+  return { ticks: out, step };
+}
+
+function draw() {
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) { canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const b = app.block(), v = app.view, p = plotRect();
+  /* Casa working area: lavender surround, white page tile */
+  ctx.fillStyle = "#E2E2F1"; ctx.fillRect(0, 0, w, h);
+  const g = pageRect();
+  ctx.fillStyle = "rgba(90,90,120,0.25)"; ctx.fillRect(g.x + 3, g.y + 3, g.w, g.h);
+  ctx.fillStyle = "#fff"; ctx.fillRect(g.x, g.y, g.w, g.h);
+  ctx.strokeStyle = "#9A9AB2"; ctx.lineWidth = 1; ctx.strokeRect(g.x + 0.5, g.y + 0.5, g.w, g.h);
+
+  /* region shading + backgrounds first (data drawn on top, like Casa) */
+  for (const r of b.regions) {
+    const xa = xPix(r.start), xb = xPix(r.end);
+    ctx.fillStyle = "rgb(239,239,239)";
+    ctx.fillRect(Math.min(xa, xb), p.y, Math.abs(xb - xa), p.h);
+  }
+
+  /* frame + ticks */
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 1;
+  ctx.strokeRect(p.x + 0.5, p.y + 0.5, p.w, p.h);
+  ctx.fillStyle = "#000";
+  ctx.font = "700 12px Arial";
+  const xt = niceTicks(v.be1, v.be0, 8);
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const t of xt.ticks) {
+    const x = xPix(t);
+    if (x < p.x - 1 || x > p.x + p.w + 1) continue;
+    ctx.beginPath(); ctx.moveTo(x + 0.5, p.y + p.h); ctx.lineTo(x + 0.5, p.y + p.h + 5); ctx.stroke();
+    ctx.fillText(String(Math.round(t * 100) / 100), x, p.y + p.h + 8);
+  }
+  /* y axis, Casa style: values scaled by 10^-n so ticks read 10–100 */
+  const nExp = Math.max(0, Math.floor(Math.log10(Math.max(10, v.c1))) - 1);
+  const yDiv = Math.pow(10, nExp);
+  const yt = niceTicks(v.c0 / yDiv, v.c1 / yDiv, 6);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const t of yt.ticks) {
+    const y = yPix(t * yDiv);
+    if (y < p.y - 1 || y > p.y + p.h + 1) continue;
+    ctx.beginPath(); ctx.moveTo(p.x - 5, y + 0.5); ctx.lineTo(p.x, y + 0.5); ctx.stroke();
+    ctx.fillText(yt.step >= 1 ? String(Math.round(t)) : fmt(t, 1), p.x - 8, y);
+  }
+  /* axis labels, Casa style */
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.font = "700 13px Arial";
+  ctx.fillText("Binding energy (eV)", p.x + p.w / 2, g.y + g.h - 22);
+  ctx.save();
+  ctx.translate(g.x + 20, p.y + p.h / 2); ctx.rotate(-Math.PI / 2);
+  const yl = "CPS x 10";
+  const ylw = ctx.measureText(yl).width;
+  ctx.fillText(yl, 0, 0);
+  ctx.font = "700 10px Arial";
+  ctx.fillText("-" + nExp, ylw / 2 + 8, -5);
+  ctx.restore();
+  /* blue tile banner across the top of the plot box */
+  const bannerT = (/^(wide|survey)$/i.test(String(b.species).trim()) ? "Survey" : (String(b.species).trim() + String(b.transition || "").trim())) + " Scan";
+  ctx.fillStyle = "#2E5AC0";
+  ctx.fillRect(p.x, p.y - 21, p.w, 19);
+  ctx.fillStyle = "#fff"; ctx.font = "700 12.5px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(bannerT, p.x + p.w / 2, p.y - 11);
+  ctx.textBaseline = "alphabetic";
+  /* red house + Mini-Casa, bottom right of the page */
+  ctx.fillStyle = "#000";
+  const hx = g.x + g.w - 66, hy = g.y + g.h - 46;
+  ctx.strokeStyle = "#CC1111"; ctx.lineWidth = 2.4; ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(hx + 4, hy + 30); ctx.lineTo(hx + 6, hy + 12); ctx.lineTo(hx + 2, hy + 14);
+  ctx.lineTo(hx + 18, hy + 2); ctx.lineTo(hx + 34, hy + 13); ctx.lineTo(hx + 29, hy + 12); ctx.lineTo(hx + 31, hy + 30);
+  ctx.closePath(); ctx.stroke();
+  ctx.strokeRect(hx + 12, hy + 18, 12, 12);
+  ctx.font = "italic 700 11px Arial"; ctx.fillStyle = "#000"; ctx.textAlign = "left";
+  ctx.fillText("Mini-Casa", hx - 4, hy + 44);
+
+  /* clip to plot for curves */
+  ctx.save();
+  ctx.beginPath(); ctx.rect(p.x, p.y, p.w, p.h); ctx.clip();
+
+  /* backgrounds (brown) */
+  for (const r of b.regions) {
+    const m = regionMetrics(b, r);
+    ctx.strokeStyle = "rgb(128,64,0)"; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = m.iA; i <= m.iB; i++) {
+      const x = xPix(beAt(b, i)), y = yPix(m.bg[i - m.iA]);
+      if (i === m.iA) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  /* data (red, on top) */
+  ctx.strokeStyle = "rgb(255,0,0)"; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < b.counts.length; i++) {
+    const x = xPix(beAt(b, i)), y = yPix(b.counts[i]);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  /* region limits (blue) with handles */
+  for (const r of b.regions) {
+    for (const which of ["start", "end"]) {
+      const x = Math.round(xPix(r[which])) + 0.5;
+      ctx.strokeStyle = "rgb(72,72,255)"; ctx.lineWidth = 1.6;
+      ctx.setLineDash([1, 0]);
+      ctx.beginPath(); ctx.moveTo(x, p.y + 4); ctx.lineTo(x, p.y + p.h); ctx.stroke();
+      ctx.fillStyle = "rgb(72,72,255)";
+      ctx.fillRect(x - 4, p.y + 4, 8, 8);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x - 2, p.y + 6, 4, 4);
+    }
+  }
+  ctx.restore();
+
+  /* zoom rubber band */
+  if (app.dragging && app.dragging.type === "zoom" && app.dragging.moved) {
+    const d = app.dragging;
+    ctx.strokeStyle = "#316AC5"; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+    ctx.strokeRect(Math.min(d.x0, d.x1) + 0.5, Math.min(d.y0, d.y1) + 0.5, Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0));
+    ctx.setLineDash([]);
+  }
+}
+
+/* ---- block browser ---- */
+function colHead(b) {
+  const sp = String(b.species || "").trim();
+  if (/^(wide|survey)$/i.test(sp)) return "XPS Sur...";
+  return (sp + " " + String(b.transition || "").trim()).trim();
+}
+function renderBrowser() {
+  const el = $("#blocklist");
+  const t = document.createElement("table");
+  t.className = "dstable";
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  const h0 = document.createElement("th"); h0.textContent = "Dataset"; hr.appendChild(h0);
+  app.blocks.forEach((b) => { const th = document.createElement("th"); th.textContent = colHead(b); hr.appendChild(th); });
+  thead.appendChild(hr); t.appendChild(thead);
+  const tr = document.createElement("tr");
+  const n0 = document.createElement("td"); n0.className = "dsnum"; n0.textContent = "1"; tr.appendChild(n0);
+  app.blocks.forEach((b, i) => {
+    const td = document.createElement("td");
+    if (i === app.cur) td.className = "on";
+    const cell = document.createElement("div"); cell.className = "dscell";
+    const flag = document.createElement("i");
+    const lb = document.createElement("span"); lb.textContent = b.id;
+    cell.appendChild(flag); cell.appendChild(lb);
+    cell.addEventListener("click", () => displayBlock(i));
+    td.appendChild(cell); tr.appendChild(td);
+  });
+  const tbody = document.createElement("tbody"); tbody.appendChild(tr); t.appendChild(tbody);
+  el.innerHTML = ""; el.appendChild(t);
+}
+function setPaneMode(m) {
+  if (app.paneMode === m) return;
+  app.paneMode = m;
+  if (TOOLBAR.modes && TOOLBAR.modes.left && TOOLBAR.modes.left.rows && TOOLBAR.modes.left.rows[0]) {
+    renderToolbars(m);
+  }
+  app.emit("pane-mode-changed", { mode: m });
+}
+function displayBlock(i) {
+  setPaneMode("right");
+  app.cur = i;
+  app.view = defaultView();
+  app.zoomStack = [];
+  renderBrowser(); draw(); renderRegionsTab();
+  $("#sbInfo").textContent = "Displayed " + app.block().id;
+  app.emit("block-displayed", { id: app.block().id, idx: i });
+}
+
+/* ---- quantify window ---- */
+const qwin = $("#qwin");
+let qtab = "regions";
+function openQuantify() {
+  if (!qwin.classList.contains("open")) {
+    qwin.classList.add("open");
+    if (!qwin.style.left) { qwin.style.left = "90px"; qwin.style.top = "70px"; }
+    app.emit("quantify-opened", {});
+  }
+  renderQBody();
+}
+function closeQuantify() { qwin.classList.remove("open"); }
+$("#btnQuantify").addEventListener("click", openQuantify);
+$("#qclose").addEventListener("click", closeQuantify);
+document.addEventListener("keydown", (e) => {
+  const map = { F6: "mock:tiledisplay", F8: "mock:processing", F10: "mock:library" };
+  if (e.key === "F7") { e.preventDefault(); openQuantify(); return; }
+  if (map[e.key]) {
+    e.preventDefault();
+    if (actionAvailable(map[e.key])) toolbarAction(map[e.key]);
+    else $("#sbInfo").textContent = "That window isn't part of this guide";
+  }
+});
+
+function setTab(t) {
+  qtab = t;
+  document.querySelectorAll(".qtab").forEach((el) => el.classList.toggle("active", el.dataset.tab === t));
+  renderQBody();
+  app.emit("tab-changed", { tab: t });
+}
+document.querySelectorAll(".qtab").forEach((el) => el.addEventListener("click", () => setTab(el.dataset.tab)));
+
+/* drag the window by its title bar */
+(function () {
+  const tb = $("#qtitle");
+  let off = null;
+  tb.addEventListener("mousedown", (e) => {
+    if (e.target.id === "qclose") return;
+    off = { dx: e.clientX - qwin.offsetLeft, dy: e.clientY - qwin.offsetTop };
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!off) return;
+    const host = $("#appwin");
+    qwin.style.left = clamp(e.clientX - off.dx, 0, host.clientWidth - 120) + "px";
+    qwin.style.top = clamp(e.clientY - off.dy, 20, host.clientHeight - 60) + "px";
+  });
+  window.addEventListener("mouseup", () => { off = null; });
+})();
+
+function createRegion() {
+  const b = app.block(), v = app.view;
+  const span = v.be0 - v.be1;
+  const r = {
+    id: ++app.regionSeq,
+    name: (b.species + " " + b.transition).trim() || "Region " + app.regionSeq,
+    rsf: b.rsf || 1,
+    bgType: "Shirley",
+    avWidth: 1,
+    start: v.be0 - span * 0.2,   /* high-BE limit */
+    end: v.be1 + span * 0.2      /* low-BE limit */
+  };
+  b.regions.push(r);
+  draw(); renderRegionsTab();
+  $("#sbInfo").textContent = "Region created — drag the blue bars to place its limits";
+  app.emit("region-created", { region: r });
+}
+function deleteRegion() {
+  const b = app.block();
+  b.regions.pop();
+  draw(); renderRegionsTab();
+  app.emit("region-deleted", {});
+}
+
+function renderQBody() {
+  const body = $("#qbody");
+  if (qtab === "regions") { renderRegionsTab(); return; }
+  if (qtab === "report") {
+    let rows = "";
+    let sum = 0;
+    const entries = [];
+    for (const b of app.blocks) {
+      for (const r of b.regions) {
+        const m = regionMetrics(b, r);
+        const norm = m.area / (r.rsf || 1);
+        entries.push({ name: r.name, block: b.id, pos: m.pos, fwhm: m.fwhm, area: m.area, rsf: r.rsf, norm });
+        sum += norm;
+      }
+    }
+    for (const e of entries) {
+      rows += "<tr><td>" + e.name + "</td><td>" + e.block + "</td><td>" + fmt(e.pos, 2) + "</td><td>" + fmt(e.fwhm, 2) +
+        "</td><td>" + fmt(e.area, 1) + "</td><td>" + fmt(e.rsf, 3) + "</td><td>" + (sum > 0 ? fmt(100 * e.norm / sum, 2) : "—") + "</td></tr>";
+    }
+    body.innerHTML = entries.length
+      ? '<table class="quant"><tr><th>Name</th><th>Block</th><th>Position (eV)</th><th>FWHM (eV)</th><th>Area (CPS·eV)</th><th>R.S.F.</th><th>%At Conc.</th></tr>' + rows + "</table>" +
+        '<div class="qnote">Areas are integrated above the region background and divided by R.S.F. This trainer does not apply transmission or escape-depth corrections — real CasaXPS does.</div>'
+      : '<div class="qnote">No regions defined yet. Create regions in the Regions tab — the report gathers them from every block.</div>';
+    return;
+  }
+  if (qtab === "components") {
+    const b = app.block();
+    const bn = (/^(wide|survey)$/i.test(String(b.species).trim()) ? "Survey" : (String(b.species).trim() + String(b.transition || "").trim())) + " Scan";
+    const rows = ["Name", "R.S.F.", "Line Shape", "Area", "Area Constr.", "fwhm", "fwhm Constr.", "Position", "Pos. Constr.", "Tag", "Comp Index", "Asymmetry Index", "% Concentr."];
+    body.innerHTML =
+      '<div class="qhead"><input type="text" readonly value="' + bn + '"></div>' +
+      '<div class="qgridwrap" style="max-height:190px"><table class="rgrid"><tr class="gridhead"><th class="rowlab" style="width:110px">Component</th></tr>' +
+      rows.map((r) => '<tr><th class="rowlab">' + r + "</th></tr>").join("") + "</table></div>" +
+      '<div class="qcols"><div class="qcolL">' +
+        '<div class="qrow">' + db("Create") + db("Create x 2") + '<span class="mchk">' + mrad("Marquardt", true) + mrad("Simplex") + "</span></div>" +
+        '<div class="qrow">' + db("Copy All") + db("Fit Components") + "</div>" +
+        '<div class="qrow">' + db("Copy") + mchk("Use RMS", true) + db("Test Peak Model") + db("Monte Carlo") + "</div>" +
+        '<div class="qrow">' + db("Cut") + db("Fit Spline BG") + db("Fit Step BG") + db("Copy and Fit") + "</div>" +
+        '<div class="qrow">' + db("Constrain Comps to Regions") + db("Copy TAGs") + db("Copy Names") + "</div>" +
+        '<fieldset class="ical"><legend>Recover Peak Model from Fit Components List</legend><div class="irow">' +
+          db("STORE to List") + db("RECALL from List") + db("RESET List") + "</div></fieldset>" +
+      '</div><div class="qcolR">' + db("Paste") + db("Paste Replace") + db("Copy RSFs") + "</div></div>" +
+      '<div class="qnote">Peak fitting comes in a later guide — this page is a visual replica of the real Components property page.</div>';
+    body.querySelectorAll(".wbtn.dead").forEach((el) => el.addEventListener("click", () => {
+      $("#sbInfo").textContent = "Peak fitting comes in a later guide — visual replica only";
+    }));
+    return;
+  }
+  const names = { data: "Data Editor", rpt: "RPT Report" };
+  body.innerHTML = '<div class="qnote">The <b>' + (names[qtab] || qtab) +
+    "</b> tab is not part of this trainer yet. The Regions and Report Spec. tabs are live.</div>";
+}
+
+/* Casa's Regions grid: full row list; rows we don't simulate are greyed. */
+const REGION_ROWS = [
+  { label: "Name", f: "name" },
+  { label: "R.S.F.", f: "rsf" },
+  { label: "Start", f: "start" },
+  { label: "End", f: "end" },
+  { label: "BG Type", f: "bgType", bg: true },
+  { label: "Av. Width", f: "avWidth" },
+  { label: "St. Offset", dead: () => "0" },
+  { label: "End Offset", dead: () => "0" },
+  { label: "Cross Section", dead: () => "299, 542, 275, 9.3" },
+  { label: "Tag", dead: (r) => r.name },
+  { label: "Area", calc: (m) => fmt(m.area, 1) },
+  { label: "Std Dev Area", dead: () => "" },
+  { label: "fwhm", calc: (m) => fmt(m.fwhm, 3) },
+  { label: "Position", calc: (m) => fmt(m.pos, 3) },
+  { label: "% Concentr.", pct: true },
+  { label: "Max Height", calc: (m) => fmt(m.height, 0) },
+  { label: "Min Height", dead: () => "" },
+  { label: "Peak to Peak %Conc", dead: () => "" }
+];
+
+function deadBtn(label, extra) {
+  return '<button type="button" class="wbtn dead" title="Greyed out in this trainer"' + (extra || "") + ">" + label + "</button>";
+}
+
+function renderRegionsTab() {
+  if (!qwin.classList.contains("open") || qtab !== "regions") return;
+  const body = $("#qbody");
+  const b = app.block();
+  const bannerName = (/^(wide|survey)$/i.test(String(b.species).trim()) ? "Survey" : (String(b.species).trim() + String(b.transition || "").trim())) + " Scan";
+
+  /* %Concentr. shares — consistent with the Report Spec. tab (all blocks) */
+  let sumNorm = 0;
+  const normFor = {};
+  for (const bb of app.blocks) for (const r of bb.regions) {
+    const m = regionMetrics(bb, r);
+    normFor[r.id] = { m, norm: m.area / (r.rsf || 1) };
+    sumNorm += normFor[r.id].norm;
+  }
+
+  let grid = '<table class="rgrid"><tr class="gridhead"><th class="rowlab" style="width:104px">Regions</th>';
+  b.regions.forEach(() => { grid += "<th></th>"; });
+  grid += "</tr>";
+  for (const row of REGION_ROWS) {
+    grid += '<tr><th class="rowlab">' + row.label + "</th>";
+    for (const r of b.regions) {
+      if (row.f && row.bg) {
+        grid += '<td><input class="bgcell" readonly data-r="' + r.id + '" value="' + r.bgType + '" title="Hold CTRL and left-click to change the background type"></td>';
+      } else if (row.f) {
+        const val = row.f === "name" ? String(r.name).replace(/"/g, "&quot;") : (row.f === "rsf" ? r.rsf : row.f === "avWidth" ? r.avWidth : fmt(r[row.f], 2));
+        grid += '<td><input data-f="' + row.f + '" data-r="' + r.id + '" value="' + val + '"></td>';
+      } else if (row.calc) {
+        grid += '<td class="calc">' + row.calc(normFor[r.id].m) + "</td>";
+      } else if (row.pct) {
+        grid += '<td class="calc">' + (sumNorm > 0 ? fmt(100 * normFor[r.id].norm / sumNorm, 2) : "") + "</td>";
+      } else {
+        grid += '<td class="deadcell">' + (row.dead ? row.dead(r) : "") + "</td>";
+      }
+    }
+    if (!b.regions.length) grid += "";
+    grid += "</tr>";
+  }
+  grid += "</table>";
+
+  body.innerHTML =
+    '<div class="qhead"><input type="text" readonly value="' + bannerName + '">' +
+    '<label style="color:#9F9F9F"><input type="checkbox" checked disabled> Calc Max</label></div>' +
+    '<div class="qgridwrap">' + grid + "</div>" +
+    '<div class="qcols">' +
+      '<div class="qcolL">' +
+        '<div class="qrow"><button type="button" class="wbtn" id="btnCreateRegion">Create</button>' + deadBtn("Order") + deadBtn("Calculate Error Bars") + "</div>" +
+        '<div class="qrow">' + deadBtn("Create From Labels") + deadBtn("Save Regions ...") + "</div>" +
+        '<div class="qrow">' + deadBtn("Paste Copied Region To Display Tile List") + "</div>" +
+        '<fieldset class="ical"><legend>Intensity Calibration</legend>' +
+          '<div class="irow"><label style="color:#9F9F9F"><input type="checkbox" checked disabled> Automatic</label>' +
+          '<input type="text" value="-0.6" disabled>' + deadBtn("Update") + "</div>" +
+          '<div style="color:#9F9F9F">Escape D.C.:&nbsp; TPP2M / ADC Magic Angle</div>' +
+        "</fieldset>" +
+        '<div class="qrow">' + deadBtn("STO") + deadBtn("RCL") + deadBtn("RST") + "</div>" +
+      "</div>" +
+      '<div class="qcolR">' +
+        '<button type="button" class="wbtn" id="btnDeleteRegion">Delete</button>' +
+        deadBtn("Copy") + deadBtn("Paste") + deadBtn("Copy All") + deadBtn("Copy and Paste") +
+        deadBtn("Copy Names") + deadBtn("Copy RSF") + deadBtn("Copy Start/End") + deadBtn("Copy Av Width") +
+      "</div>" +
+    "</div>";
+
+  $("#btnCreateRegion").addEventListener("click", createRegion);
+  $("#btnDeleteRegion").addEventListener("click", deleteRegion);
+  body.querySelectorAll(".wbtn.dead").forEach((el) => el.addEventListener("click", () => {
+    $("#sbInfo").textContent = "Greyed out in this trainer — only Create, Delete and the region cells are live";
+  }));
+
+  /* BG Type cells: CTRL + left-click opens the Background Types dialog, like real Casa */
+  body.querySelectorAll("input.bgcell").forEach((el) => {
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) openBgDialog(Number(el.dataset.r));
+      else $("#sbInfo").textContent = "Hold CTRL and left-click the BG Type cell to change the background";
+    });
+  });
+
+  /* editable cells */
+  body.querySelectorAll("input[data-f]").forEach((el) => {
+    const commit = () => {
+      if (!el.isConnected) return; /* already re-rendered by an earlier commit */
+      const r = b.regions.find((x) => x.id === Number(el.dataset.r));
+      if (!r) return;
+      const f = el.dataset.f;
+      if (f === "name") { r.name = el.value; }
+      else {
+        const num = parseFloat(el.value);
+        if (!isFinite(num)) { renderRegionsTab(); return; }
+        if (f === "rsf") r.rsf = Math.max(0.0001, num);
+        if (f === "avWidth") { r.avWidth = clamp(Math.round(num), 1, 99); app.emit("avwidth-changed", { value: r.avWidth, region: r }); }
+        if (f === "start" || f === "end") { r[f] = num; app.emit("limit-dragged", { which: f, be: num, region: r, via: "grid" }); }
+      }
+      draw(); setTimeout(renderRegionsTab, 0);
+    };
+    el.addEventListener("change", commit);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); el.blur(); } });
+  });
+}
+
+/* ---- Background Types dialog ---- */
+const bgdlg = $("#bgdlg");
+const BG_OPTIONS = ["Linear", "Shirley", "Tougaard"];
+let bgTarget = null, bgSel = "";
+function openBgDialog(regionId) {
+  const b = app.block();
+  const r = b.regions.find((x) => x.id === regionId);
+  if (!r) return;
+  bgTarget = r; bgSel = r.bgType;
+  const list = $("#bglist");
+  list.innerHTML = '<div class="lh">Background Name</div>' + BG_OPTIONS.map((o) =>
+    '<div class="opt2' + (o === bgSel ? " sel" : "") + '" data-o="' + o + '">' + o + "</div>").join("");
+  list.querySelectorAll(".opt2").forEach((el) => {
+    el.addEventListener("click", () => {
+      bgSel = el.dataset.o;
+      list.querySelectorAll(".opt2").forEach((x) => x.classList.toggle("sel", x.dataset.o === bgSel));
+    });
+    el.addEventListener("dblclick", () => { bgSel = el.dataset.o; commitBgDialog(); });
+  });
+  bgdlg.style.left = clamp(qwin.offsetLeft + 60, 0, $("#appwin").clientWidth - 260) + "px";
+  bgdlg.style.top = clamp(qwin.offsetTop + 70, 20, $("#appwin").clientHeight - 240) + "px";
+  bgdlg.classList.add("open");
+}
+function commitBgDialog() {
+  if (bgTarget && bgSel && bgTarget.bgType !== bgSel) {
+    bgTarget.bgType = bgSel;
+    app.emit("bg-type-changed", { value: bgSel, region: bgTarget });
+    draw(); renderRegionsTab();
+  }
+  bgdlg.classList.remove("open"); bgTarget = null;
+}
+$("#bgOkBtn").addEventListener("click", commitBgDialog);
+$("#bgCancelBtn").addEventListener("click", () => { bgdlg.classList.remove("open"); bgTarget = null; });
+$("#bgclose").addEventListener("click", () => { bgdlg.classList.remove("open"); bgTarget = null; });
+(function () {
+  const tb = $("#bgtitle");
+  let off = null;
+  tb.addEventListener("mousedown", (e) => {
+    if (e.target.id === "bgclose") return;
+    off = { dx: e.clientX - bgdlg.offsetLeft, dy: e.clientY - bgdlg.offsetTop };
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!off) return;
+    const host = $("#appwin");
+    bgdlg.style.left = clamp(e.clientX - off.dx, 0, host.clientWidth - 120) + "px";
+    bgdlg.style.top = clamp(e.clientY - off.dy, 20, host.clientHeight - 60) + "px";
+  });
+  window.addEventListener("mouseup", () => { off = null; });
+})();
+
+/* ============================================================
+   Mock replica windows — faithful, static copies of the real
+   CasaXPS dialogs for the software tour. Controls are visual
+   only; clicking one explains that in the status bar. Opening a
+   window emits mock-opened {id}; tab clicks emit mock-tab.
+   Built from Mark's screenshots of CasaXPS 2.3.27 (2026-08-18).
+   ============================================================ */
+const db = (label, wide) => '<button type="button" class="wbtn dead"' + (wide ? ' style="white-space:normal"' : "") + ">" + label + "</button>";
+const mchk = (label, on) => '<label class="mchk"><input type="checkbox" disabled' + (on ? " checked" : "") + ">" + label + "</label>";
+const mrad = (label, on) => '<label class="mchk"><input type="radio" disabled' + (on ? " checked" : "") + ">" + label + "</label>";
+const mtxt = (v, w) => '<input class="mtxt" disabled value="' + v + '" style="width:' + (w || 70) + 'px">';
+
+function elibTableHtml() {
+  const rows = [
+    ["Os NOO", "1432.69"], ["Al LMM", "1418.69"], ["Tl NOO", "1402.69"], ["Si LMM", "1394.69"],
+    ["Be KLL", "1388.69"], ["Br MNN", "1384.69"], ["P LMM", "1366.69"], ["Zr MNN", "1339.69"],
+    ["S LMM", "1334.69"], ["Nb MNV", "1317.69"], ["B KLL", "1314.69"], ["Cl LMM", "1305.69"],
+    ["Mg 1s", "1303", "11.18"], ["Mo MNV", "1300.69"], ["Ga 2s", "1299.6", "6.07"]
+  ];
+  let t = '<div class="mlist" style="height:170px"><table class="elib"><tr><th>Name</th><th>Energy</th><th>FWHM</th><th>R.S.F.</th><th>Line Sha</th></tr>';
+  for (const r of rows) t += "<tr><td>" + r[0] + '</td><td class="num">' + r[1] + '</td><td class="num">1</td><td class="num">' + (r[2] || "0") + "</td><td>LA(50</td></tr>";
+  t += "</table></div>";
+  return t;
+}
+function ptableHtml() {
+  const P = [
+    [["H",1],["He",18]],
+    [["Li",1],["Be",2],["B",13],["C",14],["N",15],["O",16],["F",17],["Ne",18]],
+    [["Na",1],["Mg",2],["Al",13],["Si",14],["P",15],["S",16],["Cl",17],["Ar",18]],
+    ["K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se","Br","Kr"],
+    ["Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn","Sb","Te","I","Xe"],
+    ["Cs","Ba","La","Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn"],
+    [["Fr",1],["Ra",2],["Ac",3]],
+    null,
+    [["La",4],["Ce",5],["Pr",6],["Nd",7],["Pm",8],["Sm",9],["Eu",10],["Gd",11],["Tb",12],["Dy",13],["Ho",14],["Er",15],["Tm",16],["Yb",17],["Lu",18]],
+    [["Ac",4],["Th",5],["Pa",6],["U",7],["Np",8],["Pu",9],["Am",10],["Cm",11],["Bk",12],["Cf",13],["Es",14],["Fm",15],["Md",16],["No",17],["Lr",18]]
+  ];
+  let h = '<div class="ptable">';
+  let row = 1;
+  for (const r of P) {
+    if (r === null) { row++; continue; }
+    if (typeof r[0] === "string") {
+      r.forEach((el, i) => { h += '<button style="grid-row:' + row + ';grid-column:' + (i + 1) + '">' + el + "</button>"; });
+    } else {
+      for (const [el, col] of r) h += '<button style="grid-row:' + row + ';grid-column:' + col + '">' + el + "</button>";
+    }
+    row++;
+  }
+  return h + "</div>";
+}
+
+const MOCKS = {
+  processing: {
+    title: "Spectrum Processing", width: 400,
+    tabs: [
+      ["Differentiation", null], ["Integration", null], ["Test Data", null], ["PCA", null], ["Calculator", null],
+      ["Processing History",
+        '<div class="mlist" style="height:110px"><div class="lh">Processing Command</div></div>' +
+        '<div class="mrow" style="margin-top:8px">' + db("Reset") + db("Apply Selection") + db("Propagate Flag") + "</div>" +
+        '<div class="mrow">' + db("Undo") + db("Remove") + "</div>" +
+        '<div class="mrow" style="justify-content:flex-end">' + db("Reset All") + "</div>"],
+      ["Calibration",
+        '<fieldset class="mgroup"><legend>Energy Calibration</legend>' +
+          '<div class="mrow">Measured ' + mtxt("0", 120) + db("Region") + "</div>" +
+          '<div class="mrow">True ' + mtxt("285", 120) + db("Component") + "</div>" +
+          '<div class="mrow">' + mchk("Measured Defined by Interval") + mchk("Shift All CVs") + "</div></fieldset>" +
+        '<fieldset class="mgroup"><legend>Adjust</legend><div class="mrow">' + mchk("Regions") + mchk("Components") + db("Apply") + "</div></fieldset>" +
+        '<div class="mrow">' + db("Undo Selection") + db("Apply to Selection") + "</div>" +
+        '<div class="mrow">' + db("Apply by Row (1st Region)") + db("Apply by Row ( 1st Comp)") + "</div>" +
+        '<div class="mrow">' + mchk("Use Reference Intensity") + " Reference " + mtxt("1000", 60) + "</div>" +
+        '<div class="mrow">' + mchk("Reference to Region Max CPS") + "</div>" +
+        '<div class="mrow">' + db("Apply Range Calibration to All Files") + db("Apply 1st Comp Calibration to All Files") + "</div>" +
+        '<div class="mrow">' + db("Apply Range Calib All Files by Row") + db("Apply 1st Comp Calib All Files by Row") + "</div>" +
+        '<div class="mlist" style="margin-top:6px"><div class="lh">&nbsp;</div></div>' +
+        '<div class="mlist" style="margin-top:4px"><div class="lh">Kinetic Energy Shift = 0</div></div>'],
+      ["Intensity Calib.", null], ["Smoothing", null]
+    ],
+    active: "Processing History"
+  },
+  library: {
+    title: "Element Library", width: 390,
+    tabs: [
+      ["Element Table",
+        elibTableHtml() +
+        '<div class="mrow" style="margin-top:6px">' + mchk("Zoom When Line Selected") + "</div>" +
+        '<div class="mrow">' + mchk("Create When Line Selected") + db("Find Peaks") + "</div>" +
+        '<div class="mrow">' + mchk("Use Library FWHM") + db("Create Regions") + "</div>" +
+        '<div class="mrow">' + db("Create Regions Basic Report") + "</div>" +
+        '<div class="mrow">' + db("Clear All Elements") + db("Edit Block Species/Trans") + "</div>" +
+        '<div class="mrow">' + mtxt("", 120) + db("Edit Source Analyser Angle") + "</div>" +
+        '<div class="mrow">' + db("#T +") + db("#T -") + db("Overlay Linked VBs") + db("Display Linked VBs") + "</div>"],
+      ["Periodic Table",
+        ptableHtml() +
+        '<div class="mrow">' + db("Clear All Elements") + db("Find Peaks") + "</div>" +
+        '<div class="mrow">' + db("Create Regions from Markers") + db("Create Regions") + "</div>" +
+        '<div class="mrow" style="justify-content:flex-end">' + db("Create Regions Basic Table") + "</div>"],
+      ["Input File",
+        '<div class="mrow">' + mtxt("", 330) + "</div>" +
+        '<div class="mrow">' + db("Browse ...") + db("Write ADC Lib") + "</div>" +
+        '<div class="mrow">' + db("Browse Lib Dir ...") + db("Write Inverse ADC Lib") + "</div>" +
+        '<div class="mrow">' + db("Reload Default Lib") + db("Open Lineshape Lib") + "</div>" +
+        '<fieldset class="mgroup"><legend>File Type</legend>' +
+          '<div class="mrow">' + mrad("CasaXPS lib", true) + mrad("Kratos lib") + "</div>" +
+          '<div class="mrow">' + mrad("SSI Type 1") + mrad("SSI Type 2") + "</div>" +
+          '<div class="mrow">' + mrad("KAL lib") + mrad("Simple Table") + "</div>" +
+          '<div class="mrow">' + mrad("RBD Table") + mrad("VG Av. Scofield") + "</div>" +
+          '<div class="mrow">' + mrad("VG Av. Wagner") + mrad("JEOL AES") + "</div>" +
+          '<div class="mrow">' + mrad("Thermo Av.") + mrad("Ulvac PHI") + "</div>" +
+          '<div class="mrow">' + mrad("JEOL XPS") + "</div></fieldset>" +
+        '<div class="mrow">' + mtxt("", 330) + "</div>" +
+        '<div class="mrow" style="justify-content:space-between">' + db("Load") + db("Merge") + "</div>"],
+      ["Exact Mass", null]
+    ],
+    active: "Element Table"
+  },
+  tiledisplay: {
+    title: "Tile Display Parameters", width: 560,
+    tabs: [
+      ["Display",
+        '<div style="display:flex;gap:10px"><fieldset class="mgroup" style="flex:1"><legend>Display Items</legend>' +
+        [["Title",1],["Use Id Title",0],["Use Title Text",0],["Vamas Block Comment",0],["Quant. Regions",0],["Clip to Regions",1],
+         ["Acquisition Parameters",0],["Synthetic Components",1],["Annotation",1],["Residual",1],["Envelope",1],
+         ["Exclude Annot. Tables",0],["Spectrum Background",1],["Quant. Region Labels",0],["Normalise Residual",1],["Residual StDev",1],
+         ["Component Labels",0],["Draw Box on Header",0],["Vert. Component Labels",0],["Axes Major Lines",0],["Grid",0],
+         ["Component: Label All",0],["Vert. Quant. Region Labels",1],["Draw Graph Box",1],["Half Tile Display",0],["Draw 3D Planes",1],
+         ["Draw Lines",1],["Draw Points",0],["Fill Below",0],["Data on Top",1],["Draw Key",0],["Key on Left",0],["Key Both Sides",0],
+         ["Description Key",0],["Key Scale Colours",0],["Sample Id Key",0],["Include Exp Variable",0],
+         ["Display Comps from First Spectrum",0],["Dashed Comps",0],["Display Spectrum Index",0],["Dashed Lines",0],
+         ["VB Comment 1st Tile Only",0],["Annotation 1st Tile Only",0]].map((c) => mchk(c[0], c[1])).join("") +
+        "</fieldset>" +
+        '<div style="width:130px;display:flex;flex-direction:column;gap:5px">' + db("Header Font") + db("Axes Font") + db("Axes Label Font") +
+          '<fieldset class="mgroup"><legend>Axes Tickmarks</legend>' + mchk("Both Sides") + mchk("Inwards") + "</fieldset>" +
+          '<fieldset class="mgroup"><legend>Line Width</legend>' + mtxt("3", 60) + "</fieldset>" +
+          '<fieldset class="mgroup"><legend>Shape Width</legend>' + mtxt("9", 60) + "</fieldset>" +
+          '<fieldset class="mgroup"><legend>Point Spacing</legend>' + mtxt("0", 60) + "</fieldset></div></div>" +
+        '<fieldset class="mgroup"><legend>Title</legend><div class="mrow">' + mtxt("wide", 300) + db("Font") + mchk("Formula", 1) + "</div></fieldset>" +
+        '<div class="mrow" style="justify-content:flex-end">' + db("OK") + db("Cancel") + db("Apply") + "</div>"],
+      ["Colours",
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">' +
+        ["Tile Background","Residual Trace","Trace = Spectra","Spectra = Scale","3D Background","Spectra","Spectra = Components","Spectra = Tile Clr",
+         "Region Background","Spectra Background","Background = Spectra","Spectra = Tile Clr +2","3D Fill","Synthetic Components","Components = Spectra","Comp = Scale",
+         "Page Background","Region Markers","Synthetic Envelope","Syn Env = Spec."].map((b) => db(b)).join("") + "</div>" +
+        '<div style="margin-top:8px">' + [["Colour Components using Comp Index",0],["Last Region Mark Automatic",0],["Combine Comp Index",0],["Mark Last Region",0],
+          ["Fill Combined Components",0],["Fill One Colour",0],["Mark Comp Position",0],["Components Displayed as Background",0],["Mark Comp FWHM",0],
+          ["Fill Translucent Components",0],["Mark Region Av. Width",0],["High Quality Draw Components",0],["Draw Comp Index Outline",0]].map((c) => mchk(c[0], c[1])).join("") + "</div>" +
+        '<fieldset class="mgroup"><legend>Spectrum Colour Modes</legend>' +
+          '<div class="mrow">' + mchk("Display Spectrum use Scale") + mchk("Change Colour for each Tile") + "</div>" +
+          '<div class="mrow">' + mrad("Light Tile") + mrad("Blue/Red") + mrad("Dark Tile") + mchk("Colour by VB Column") + "</div>" +
+          '<div class="mrow">' + mrad("Automatic", true) + mrad("Red/Yellow") + mrad("Grey") + "</div></fieldset>" +
+        '<div class="mrow">' + db("Shape Option List") + db("Shape and Colour Option List") + "</div>" +
+        '<div class="mrow" style="justify-content:flex-end">' + db("OK") + db("Cancel") + db("Apply") + "</div>"],
+      ["X Axis", null], ["Y Axis", null], ["Geometry", null],
+      ["Global",
+        '<fieldset class="mgroup"><legend>Global Actions</legend>' + mchk("Apply To All Tiles") + "<br>" +
+          mchk("Include X axis range") + mchk("Include Y axis range") + mchk("Include Title") + "</fieldset>" +
+        '<div class="mrow">' + db("Edit Shapes List") + db("Restore Default Settings") + "</div>" +
+        '<div class="mrow">' + db("Save Default Colours") + db("Save Default Settings") + db("Save Default Fonts") + "</div>" +
+        '<div class="mrow">' + db("Save Default Page Tile Format") + "</div>" +
+        '<fieldset class="mgroup"><legend>Update All Fonts</legend><div class="mrow">Update All Tile Display Fonts with the same Font: ' + db("Set All Fonts") + "</div></fieldset>" +
+        '<fieldset class="mgroup"><legend>Save Alternative Default Display</legend><div class="mrow">' +
+          db("Save Alt Display Colours") + db("Save Alt Display Settings") + "</div><div class=\"mrow\">" +
+          db("Save Alt Display Fonts") + db("Save Alt Display Page Tile Format") + "</div></fieldset>" +
+        '<div class="mrow" style="justify-content:flex-end">' + db("OK") + db("Cancel") + db("Apply") + "</div>"]
+    ],
+    active: "Display"
+  },
+  vamasfields: {
+    title: "Edit VAMAS Fields", width: 300,
+    body:
+      [["Block Id", "wide"], ["Element", "wide"], ["Transition", ""], ["Exp Variable", "1"], ["Technique", "XPS"],
+       ["Source Label", "Al (mono)"], ["Source Energy", "1486.69"], ["Magnification", "1e+37"], ["Resolution", "160"],
+       ["No. Scans", "1"], ["Dwell Time", "0.0995"], ["Abscissa Start", "286.69"], ["Abscissa Increment", "1"]]
+        .map((f) => '<div class="mrow" style="justify-content:flex-end">' + f[0] + " " + mtxt(f[1], 150) + "</div>").join("") +
+      '<div class="mrow" style="justify-content:space-between;margin-top:8px">' + db("OK") + db("Cancel") + "</div>"
+  },
+  sourceinfo: {
+    title: "Source and Analyzer Information", width: 380,
+    body:
+      [["Update Source Label", 1, "Source Label", "Al (mono)"], ["Update Source Energy", 1, "Source Energy", "1486.69"],
+       ["Update Magnification", 1, "Magnification", "1e+37"], ["Update Resolution", 1, "Resolution", "160"],
+       ["Update Abscissa Start", 0, "Abscissa Start", "286.69"], ["Update Abscssa Increment", 0, "Abscissa Increment", "1"]]
+        .map((f) => '<div class="mrow" style="justify-content:space-between">' + mchk(f[0], f[1]) + "<span>" + f[2] + " " + mtxt(f[3], 110) + "</span></div>").join("") +
+      '<div class="mrow" style="justify-content:space-between;margin-top:8px">' + db("OK") + db("Cancel") + "</div>" +
+      '<div class="mlist" style="margin-top:6px"><div class="lh">Apply changes to Browser Selection in Focus Window</div></div>'
+  }
+};
+
+const mockEls = {};
+function openMock(id) {
+  const def = MOCKS[id];
+  if (!def) return;
+  let win = mockEls[id];
+  if (!win) {
+    win = document.createElement("div");
+    win.className = "mockwin";
+    win.style.width = def.width + "px";
+    let html = '<div class="mtitle"><span class="mico"></span>' + def.title +
+      '<span class="msys"><span>—</span><span>❐</span><span class="mx">✕</span></span></div>';
+    if (def.tabs) {
+      html += '<div class="mtabs">' + def.tabs.map((t) =>
+        '<span class="mtab' + (t[0] === def.active ? " active" : "") + '" data-t="' + t[0] + '">' + t[0] + "</span>").join("") + "</div>";
+    }
+    html += '<div class="mbody"></div>';
+    win.innerHTML = html;
+    $("#mockhost").appendChild(win);
+    const body = win.querySelector(".mbody");
+    const setTab = (name) => {
+      win.querySelectorAll(".mtab").forEach((el) => el.classList.toggle("active", el.dataset.t === name));
+      const t = def.tabs ? def.tabs.find((x) => x[0] === name) : null;
+      body.innerHTML = def.tabs
+        ? (t && t[1]) || '<div class="qnote">The <b>' + name + "</b> tab isn't wired in this tour — it's here so the layout matches the real thing.</div>"
+        : def.body;
+      app.emit("mock-tab", { id: id, tab: name });
+    };
+    if (def.tabs) {
+      win.querySelectorAll(".mtab").forEach((el) => el.addEventListener("click", () => setTab(el.dataset.t)));
+      const t0 = def.tabs.find((x) => x[0] === def.active);
+      body.innerHTML = (t0 && t0[1]) || "";
+    } else {
+      body.innerHTML = def.body;
+    }
+    body.addEventListener("click", (e) => {
+      if (e.target.closest(".wbtn, .mchk, .mtxt, .ptable button, table.elib")) {
+        $("#sbInfo").textContent = "Visual replica only — this control isn't wired in the tour";
+      }
+    });
+    win.querySelector(".mx").addEventListener("click", () => win.classList.remove("open"));
+    /* drag */
+    const tb = win.querySelector(".mtitle");
+    let off = null;
+    tb.addEventListener("mousedown", (e) => {
+      if (e.target.classList.contains("mx")) return;
+      off = { dx: e.clientX - win.offsetLeft, dy: e.clientY - win.offsetTop };
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!off) return;
+      const host = $("#appwin");
+      win.style.left = clamp(e.clientX - off.dx, 0, host.clientWidth - 120) + "px";
+      win.style.top = clamp(e.clientY - off.dy, 20, host.clientHeight - 60) + "px";
+    });
+    window.addEventListener("mouseup", () => { off = null; });
+    mockEls[id] = win;
+  }
+  if (!win.style.left) {
+    const n = Object.keys(mockEls).indexOf(id);
+    win.style.left = (120 + n * 36) + "px";
+    win.style.top = (60 + n * 28) + "px";
+  }
+  win.classList.add("open");
+  app.emit("mock-opened", { id: id });
+}
+
+/* ============================================================
+   Menu dropdowns — File and Options from the real menus; items
+   are visual only. Other menus explain themselves.
+   ============================================================ */
+const MENUS = {
+  File: [["New", "Ctrl+N"], ["Open...", "Ctrl+O"], ["Convert...", ""], ["Close", ""], ["Save As...", ""], ["Save Picture ...", ""], "-",
+    ["Open and Merge ...", ""], ["Open and Merge No Sort ...", ""], ["Convert and Merge ...", ""], ["Convert and Merge No Sort ...", ""], "-",
+    ["Browse Files ...", ""], ["Batch Process ...", ""], "-",
+    ["Save", ""], ["Save All ...", ""], ["Close All Files NO SAVE ...", ""], "-",
+    ["Save Tile Format File ...", ""], ["Load Tile Format File ...", ""], ["Load TFF from Defaults ...", ""], "-",
+    ["Load Page Layout File ...", ""], ["Load Page Layout File for All ...", ""], ["Print All Windows ...", ""], "-",
+    ["Print", "Ctrl+P"], ["Print Setup...", ""], ["Print Preview", ""], ["Print Footnote ...", ""], ["Vertical Text ...", ""], "-",
+    ["1 SiTemplate.vms", ""], "-", ["Exit", ""]],
+  Options: [["Page Layout ...", ""], ["Tile Display ...", ""], ["Narrow Quantify...", ""], ["Wide Quantify...", ""],
+    ["Elements ...", ""], ["Processing ...", ""], ["Annotation ...", ""], ["Image Processing ...", ""], "-",
+    ["Insert Tile", "INSERT"], ["Add Tile", "Ctrl+INSERT"], ["Adjust Tile", "Shift+INSERT"], ["Add Tiles by Row", "Alt+INSERT"], "-",
+    ["Delete Tile", "DELETE"], "-",
+    ["Save Tile Format", "Ctrl+A"], ["Restore Tile Format", "Ctrl+X"], ["Display Using Tile Format", "Ctrl+Z"],
+    ["Restore Last Used Tile Display", "Ctrl+Q"], ["Apply Tile Format to Selected VBs", "Ctrl+R"], ["Apply Page Format Scrolled List", "Ctrl+T"],
+    ["Save Tile Format File ...", ""], ["Load Tile Format File ...", ""], ["Load TFF file ALL Files ...", ""], ["Save EMF All Windows ...", ""], "-",
+    ["Reload CasaXPS Default Files", ""], ["Reload  Default Display Files", ""], ["Reload Default Display All Files", ""], ["Reload Alt Default Display Files", ""]]
+};
+const menudrop = $("#menudrop");
+function openMenu(name, anchorEl) {
+  const items = MENUS[name];
+  if (!items) {
+    $("#sbInfo").textContent = "The " + name + " menu isn't part of this tour";
+    return;
+  }
+  menudrop.innerHTML = items.map((it) => it === "-" ? '<div class="msep"></div>' :
+    '<div class="mi"><span>' + it[0] + '</span><span class="acc">' + it[1] + "</span></div>").join("");
+  const host = $("#appwin").getBoundingClientRect();
+  const a = anchorEl.getBoundingClientRect();
+  menudrop.style.left = (a.left - host.left) + "px";
+  menudrop.style.top = (a.bottom - host.top) + "px";
+  menudrop.classList.add("open");
+  menudrop.querySelectorAll(".mi").forEach((el) => el.addEventListener("click", () => {
+    $("#sbInfo").textContent = "Visual replica only — menu items aren't wired in the tour";
+    menudrop.classList.remove("open");
+  }));
+  app.emit("menu-opened", { menu: name });
+}
+document.addEventListener("mousedown", (e) => {
+  if (!menudrop.contains(e.target) && !e.target.classList.contains("menu")) menudrop.classList.remove("open");
+});
+
+/* ---- plot interactions ---- */
+function limitHit(mx) {
+  const b = app.block();
+  for (const r of b.regions) {
+    for (const which of ["start", "end"]) {
+      if (Math.abs(xPix(r[which]) - mx) <= 6) return { region: r, which };
+    }
+  }
+  return null;
+}
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const p = plotRect();
+  const inside = mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h;
+  if (app.dragging && app.dragging.type === "limit") {
+    const d = app.dragging;
+    const be = beFromPix(clamp(mx, p.x, p.x + p.w));
+    d.region[d.which] = Math.round(be * 100) / 100;
+    draw(); renderRegionsTab();
+    $("#sbPos").textContent = "BE: " + fmt(be, 2) + " eV · limit";
+    return;
+  }
+  if (app.dragging && app.dragging.type === "zoom") {
+    app.dragging.x1 = mx; app.dragging.y1 = my;
+    app.dragging.moved = Math.abs(mx - app.dragging.x0) > 6 && Math.abs(my - app.dragging.y0) > 6;
+    draw();
+    return;
+  }
+  if (inside) {
+    const hit = limitHit(mx);
+    canvas.style.cursor = hit ? "ew-resize" : "crosshair";
+    const b = app.block();
+    const be = beFromPix(mx);
+    const i = idxForBe(b, be);
+    $("#sbPos").textContent = "BE: " + fmt(be, 2) + " eV · " + fmt(b.counts[i], 0) + " CPS";
+  } else {
+    canvas.style.cursor = "default";
+  }
+});
+canvas.addEventListener("mousedown", (e) => {
+  setPaneMode("left");
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const p = plotRect();
+  if (mx < p.x || mx > p.x + p.w || my < p.y || my > p.y + p.h) return;
+  const hit = limitHit(mx);
+  if (hit) app.dragging = { type: "limit", region: hit.region, which: hit.which };
+  else app.dragging = { type: "zoom", x0: mx, y0: my, x1: mx, y1: my, moved: false };
+  e.preventDefault();
+});
+window.addEventListener("mouseup", () => {
+  const d = app.dragging;
+  app.dragging = null;
+  if (!d) return;
+  if (d.type === "limit") {
+    /* normalise: start = high BE, end = low BE */
+    const r = d.region;
+    if (r.start < r.end) { const t = r.start; r.start = r.end; r.end = t; }
+    draw(); renderRegionsTab();
+    app.emit("limit-dragged", { which: d.which, be: r[d.which], region: r, via: "plot" });
+  } else if (d.type === "zoom" && d.moved) {
+    app.zoomStack.push({ ...app.view });
+    const beA = beFromPix(Math.min(d.x0, d.x1)), beB = beFromPix(Math.max(d.x0, d.x1));
+    const cA = cFromPix(Math.max(d.y0, d.y1)), cB = cFromPix(Math.min(d.y0, d.y1));
+    app.view = { be0: Math.max(beA, beB), be1: Math.min(beA, beB), c0: Math.min(cA, cB), c1: Math.max(cA, cB) };
+    draw();
+    app.emit("zoomed", {});
+  } else {
+    draw();
+  }
+});
+canvas.addEventListener("dblclick", () => { app.view = defaultView(); app.zoomStack = []; draw(); });
+document.querySelectorAll(".tbtn.dead").forEach((el) => el.addEventListener("click", () => {
+  $("#sbInfo").textContent = "Greyed out in this trainer — only Quantification Parameters is live";
+}));
+document.querySelectorAll("#menubar .menu").forEach((el) => {
+  el.addEventListener("click", (e) => { e.stopPropagation(); openMenu(el.textContent.trim(), el); });
+});
+
+window.addEventListener("resize", () => { draw(); tutor.respot(); });
+
+/* ============================================================================
+   Trainer overlay
+   ============================================================================ */
+const tutor = {
+  i: 0, doneFlags: [], active: true,
+  el: { box: $("#tutor"), pill: $("#tutorpill"), spot: $("#spot"),
+        doTxt: $("#tDo"), why: $("#tWhy"), state: $("#tState"),
+        back: $("#tBack"), no: $("#tStepNo"), dots: $("#tDots") },
+  start() {
+    this.i = 0;
+    this.doneFlags = TUTORIAL.steps.map(() => false);
+    this.render();
+  },
+  step() { return TUTORIAL.steps[this.i]; },
+  render() {
+    const s = this.step();
+    const n = TUTORIAL.steps.length;
+    this.el.no.textContent = (this.i + 1) + "/" + n;
+    this.el.doTxt.textContent = s.do;
+    this.el.why.textContent = s.why;
+    this.el.dots.innerHTML = TUTORIAL.steps.map((_, k) =>
+      '<i class="' + (k === this.i ? "on" : k < this.i ? "past" : "") + '"></i>').join("");
+    this.el.back.style.visibility = this.i === 0 ? "hidden" : "visible";
+    this.paintState(this.doneFlags[this.i]);
+    this.respot();
+    if (s.onEnter) { try { s.onEnter(app); } catch (e) {} }
+  },
+  paintState(done) {
+    const s = this.step();
+    this.el.state.className = "state " + (done ? "done" : "wait");
+    if (done) { this.el.state.innerHTML = "✓ Nice — moving on…"; return; }
+    if (s && s.ack) {
+      this.el.state.innerHTML = "";
+      const b = document.createElement("button");
+      b.className = "hxbtn"; b.id = "tAck"; b.textContent = "Got it →";
+      b.addEventListener("click", () => this.setDone(true));
+      this.el.state.appendChild(b);
+      return;
+    }
+    this.el.state.innerHTML = "Waiting for you to do this…";
+  },
+  setDone(done) {
+    this.doneFlags[this.i] = done;
+    this.paintState(done);
+    if (!done) return;
+    const stepAt = this.i;
+    clearTimeout(this._adv);
+    this._adv = setTimeout(() => {
+      if (!this.active || this.i !== stepAt) return;
+      if (this.i >= TUTORIAL.steps.length - 1) this.finish();
+      else { this.i += 1; this.render(); }
+    }, 950);
+  },
+  check(ev, payload) {
+    if (!this.active) return;
+    const s = this.step();
+    if (!s || this.doneFlags[this.i]) return;
+    if (s.detect && s.detect.event === ev) {
+      let ok = true;
+      if (s.detect.test) { try { ok = !!s.detect.test(payload, app); } catch (e) { ok = false; } }
+      if (ok) this.setDone(true);
+    }
+  },
+  next() {
+    if (this.i >= TUTORIAL.steps.length - 1) { this.finish(); return; }
+    this.i += 1; this.render();
+  },
+  back() { if (this.i > 0) { this.i -= 1; this.render(); } },
+  finish() {
+    this.active = false;
+    this.el.spot.classList.remove("on");
+    $("#endTitle").textContent = TUTORIAL.end.title;
+    $("#endText").textContent = TUTORIAL.end.text;
+    $("#endcard").classList.add("open");
+    this.el.box.style.display = "none";
+  },
+  respot() {
+    const s = this.step();
+    const spot = this.el.spot;
+    if (!this.active || !s || !s.spot) { spot.classList.remove("on"); return; }
+    let r = null;
+    if (s.spot === "plot") {
+      const c = canvas.getBoundingClientRect(), host = $("#appwin").getBoundingClientRect();
+      const p = plotRect();
+      r = { left: c.left - host.left + p.x, top: c.top - host.top + p.y, width: p.w, height: p.h };
+    } else {
+      const el = document.querySelector(s.spot);
+      if (el) {
+        const b = el.getBoundingClientRect(), host = $("#appwin").getBoundingClientRect();
+        r = { left: b.left - host.left, top: b.top - host.top, width: b.width, height: b.height };
+      }
+    }
+    if (!r) { spot.classList.remove("on"); return; }
+    spot.style.left = (r.left - 5) + "px";
+    spot.style.top = (r.top - 5) + "px";
+    spot.style.width = (r.width + 10) + "px";
+    spot.style.height = (r.height + 10) + "px";
+    spot.classList.add("on");
+  }
+};
+["block-displayed", "quantify-opened", "region-created", "bg-type-changed", "avwidth-changed", "limit-dragged", "tab-changed", "zoomed", "pane-mode-changed", "mock-opened", "mock-tab", "menu-opened"]
+  .forEach((ev) => app.on(ev, (p) => { tutor.check(ev, p); }));
+
+$("#tSkip").addEventListener("click", () => tutor.next());
+/* the guide panel can sit over what you need to click — drag it by its header */
+(function () {
+  const box = $("#tutor");
+  const head = box.querySelector(".thead");
+  let off = null;
+  head.addEventListener("mousedown", (e) => {
+    if (e.target.id === "tMin") return;
+    off = { dx: e.clientX - box.offsetLeft, dy: e.clientY - box.offsetTop };
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!off) return;
+    const host = $("#appwin");
+    box.style.left = clamp(e.clientX - off.dx, 4, host.clientWidth - 120) + "px";
+    box.style.top = clamp(e.clientY - off.dy, 4, host.clientHeight - 80) + "px";
+    box.style.right = "auto"; box.style.bottom = "auto";
+  });
+  window.addEventListener("mouseup", () => { off = null; });
+})();
+$("#tBack").addEventListener("click", () => tutor.back());
+$("#tMin").addEventListener("click", () => {
+  tutor.el.box.style.display = "none"; tutor.el.pill.style.display = "block"; tutor.el.spot.classList.remove("on");
+});
+$("#tutorpill").addEventListener("click", () => {
+  tutor.el.pill.style.display = "none"; tutor.el.box.style.display = "block"; tutor.respot();
+});
+$("#endFree").addEventListener("click", () => {
+  $("#endcard").classList.remove("open");
+  tutor.el.pill.style.display = "block";
+});
+$("#endRestart").addEventListener("click", () => {
+  $("#endcard").classList.remove("open");
+  tutor.active = true; tutor.el.box.style.display = "block";
+  tutor.start();
+});
+/* the quantify window moving/being used can shift spotlight targets */
+setInterval(() => { if (tutor.active) tutor.respot(); }, 700);
+
+/* ---- boot ---- */
+document.title = APP_TITLE;
+$("#titletext").textContent = APP_TITLE + " - [" + TUTORIAL.title + "]";
+renderBrowser();
+$("#sbFile").textContent = (String(DATASET.source || "").match(/\S+\.(vms|npl|dset)/i) || ["No File"])[0];
+app.cur = 0;
+app.view = defaultView();
+draw();
+tutor.start();
+</script>
+<div style="position:fixed;left:12px;bottom:6px;font-size:10px;color:#E8EEF6;font-family:Arial">
+  Training simulator by HarwellXPS. Not affiliated with Casa Software Ltd — CasaXPS is a trademark of Casa Software Ltd.
+</div>
+</body>
+</html>
